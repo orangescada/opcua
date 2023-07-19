@@ -1,0 +1,208 @@
+{
+  "driver": {
+    "orangeScadaPort": 8892,
+    "orangeScadaHost": "localhost",
+    "ssl": false,
+    "version": "1.0",
+    "uid": "1234",
+    "password": "password",
+    "isItemsEditable": true
+  },
+  "optionsScheme": {
+    "devices": {
+      "endpointUrl": {
+        "type": "varchar",
+        "name": "Endpoint Url for OPCUA Server",
+        "currentValue": "",
+        "restartOnChange": true
+      },
+      "browseTrigger": {
+        "name": "Browse Trigger",
+        "type": "select",
+        "currentValue": "Stop",
+        "selectValues": {
+          "Start": "Start browse opc tags",
+          "Stop": "Stop browse"
+        }
+      },
+      "securityMode": {
+        "name": "Security Mode",
+        "type": "select",
+        "currentValue": "None",
+        "selectValues": {
+          "None": "None",
+          "Sign": "Sign",
+          "SignAndEncrypt": "SignAndEncrypt"
+        }
+      },
+      "securityPolicy": {
+        "name": "Security Policy",
+        "type": "select",
+        "currentValue": "None",
+        "selectValues": {
+          "None": "None",
+          "Aes128_Sha256_RsaOaep": "Aes128_Sha256_RsaOaep",
+          "Aes256_Sha256_RsaPss": "Aes256_Sha256_RsaPss",
+          "Basic128": "Basic128",
+          "Basic128Rsa15": "Basic128Rsa15",
+          "Basic192": "Basic192",
+          "Basic192Rsa15": "Basic192Rsa15",
+          "Basic256": "Basic256",
+          "Basic256Rsa15": "Basic256Rsa15",
+          "Basic256Sha256": "Basic256Sha256"
+        }
+      },
+      "certificateFile": {
+        "type": "varchar",
+        "name": "Path to client's certificate pem-file",
+        "currentValue": ""
+      },
+      "privateKeyFile": {
+        "type": "varchar",
+        "name": "Path to client's private key pem-file",
+        "currentValue": ""
+      },
+      "anonymous": {
+        "name": "Anonymous mode",
+        "type": "bool",
+        "currentValue": true
+      },
+      "userName": {
+        "name": "OPC Username",
+        "type": "varchar",
+        "currentValue": ""
+      },
+      "password": {
+        "name": "OPC Password",
+        "type": "varchar",
+        "currentValue": ""
+      },
+      "timeout": {
+        "type": "number",
+        "name": "Timeout",
+        "minValue": 1,
+        "maxValue": 60000,
+        "currentValue": 10000
+      }
+    },
+    "tags": {
+      "nodeId": {
+        "type": "varchar",
+        "name": "NodeId",
+        "restartOnChange": true
+      }
+    }
+  },
+  "nodes": {
+    "1": {
+      "name": "OPCUA Group",
+      "options": {}
+    }
+  },
+  "devices": {
+    "1": {
+      "name": "OPCUA test",
+      "nodeUid": "1",
+      "active": true,
+      "options": {
+        "endpointUrl": {
+          "currentValue": "opc.tcp://DESKTOP-TMRFNLR:53530/OPCUA/SimulationServer"
+        },
+        "timeout": {
+          "currentValue": 10000
+        },
+        "browseTrigger": {
+          "currentValue": "Stop"
+        },
+        "securityMode": {
+          "currentValue": "None"
+        },
+        "securityPolicy": {
+          "currentValue": "None"
+        },
+        "anonymous": {
+          "currentValue": true
+        },
+        "userName": {
+          "currentValue": ""
+        },
+        "password": {
+          "currentValue": ""
+        },
+        "certificateFile": {
+          "currentValue": ""
+        },
+        "privateKeyFile": {
+          "currentValue": ""
+        }
+      },
+      "tags": {
+        "1": {
+          "name": "Counter test",
+          "options": {
+            "nodeId": {
+              "currentValue": "ns=3;i=1002"
+            }
+          },
+          "type": "int",
+          "address": 1,
+          "read": true,
+          "write": false,
+          "subscribed": true
+        }
+      }
+    },
+    "2": {
+      "name": "OPCUA2 test",
+      "nodeUid": "1",
+      "active": true,
+      "options": {
+        "endpointUrl": {
+          "currentValue": "opc.tcp://localhost:4840/"
+        },
+        "timeout": {
+          "currentValue": 10000
+        },
+        "browseTrigger": {
+          "currentValue": "Stop"
+        },
+        "securityMode": {
+          "currentValue": "Sign"
+        },
+        "securityPolicy": {
+          "currentValue": "Basic256Sha256"
+        },
+        "anonymous": {
+          "currentValue": true
+        },
+        "userName": {
+          "currentValue": "user1"
+        },
+        "password": {
+          "currentValue": "password1"
+        },
+        "certificateFile": {
+          "currentValue": "./certificate.pem"
+        },
+        "privateKeyFile": {
+          "currentValue": "./private_key.pem"
+        }
+      },
+      "tags": {
+        "1": {
+          "name": "CurrTime",
+          "options": {
+            "nodeId": {
+              "currentValue": "ns=1;i=2345"
+            }
+          },
+          "type": "datetime",
+          "address": 1,
+          "read": true,
+          "write": false,
+          "subscribed": false
+        }
+      }
+    }
+  }
+}

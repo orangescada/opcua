@@ -1,0 +1,7 @@
+Dockerfile
+*.pem
+/node_modules/**/*
+/open/
+/open/**/*
+/.vscode/**/*
+opcua.js

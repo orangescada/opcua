@@ -1,0 +1,4 @@
+openssl genrsa -out private_key.pem 2048
+openssl req -new -key private_key.pem -out CSR.csr
+<create v3.ext>
+openssl x509 -req -in CSR.csr -signkey private_key.pem -out certificate.pem -days 3650 -sha256 -extfile v3.ext

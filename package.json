@@ -1,0 +1,20 @@
+{
+  "name": "@orangescada/opcua-driver",
+  "version": "1.0.0",
+  "description": "OPCUA driver for OrangeScada",
+  "main": "driver.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node driver.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": ".git"
+  },
+  "author": "OrangeScada",
+  "license": "ISC",
+  "dependencies": {
+    "moment": "^2.29.4",
+    "node-opcua": "2.103.0"
+  }
+}
