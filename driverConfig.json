@@ -90,6 +90,10 @@
         "type": "varchar",
         "name": "NodeId",
         "restartOnChange": true
+      },
+      "nodeType": {
+        "type": "number",
+        "name": "Node Type Code"
       }
     }
   },
@@ -101,16 +105,13 @@
   },
   "devices": {
     "1": {
-      "name": "OPCUA test",
+      "name": "opc",
       "nodeUid": "1",
       "active": true,
       "options": {
         "endpointUrl": {
           "currentValue": "opc.tcp://localhost:53530/OPCUA/SimulationServer"
         },
-        "timeout": {
-          "currentValue": 10000
-        },
         "browseTrigger": {
           "currentValue": "Stop"
         },
@@ -119,6 +120,12 @@
         },
         "securityPolicy": {
           "currentValue": "None"
+        },
+        "certificateFile": {
+          "currentValue": ""
+        },
+        "privateKeyFile": {
+          "currentValue": ""
         },
         "anonymous": {
           "currentValue": true
@@ -129,78 +136,26 @@
         "password": {
           "currentValue": ""
         },
-        "certificateFile": {
-          "currentValue": ""
-        },
-        "privateKeyFile": {
-          "currentValue": ""
+        "timeout": {
+          "currentValue": 10000
         }
       },
       "tags": {
         "1": {
-          "name": "Counter test",
+          "name": "Counter",
           "options": {
             "nodeId": {
               "currentValue": "ns=3;i=1002"
+            },
+            "nodeType": {
+              "currentValue": 6
             }
           },
-          "type": "int",
           "address": 1,
           "read": true,
-          "write": false,
-          "subscribed": true
-        }
-      }
-    },
-    "2": {
-      "name": "OPCUA2 test",
-      "nodeUid": "1",
-      "active": true,
-      "options": {
-        "endpointUrl": {
-          "currentValue": "opc.tcp://localhost:4840/"
-        },
-        "timeout": {
-          "currentValue": 10000
-        },
-        "browseTrigger": {
-          "currentValue": "Stop"
-        },
-        "securityMode": {
-          "currentValue": "Sign"
-        },
-        "securityPolicy": {
-          "currentValue": "Basic256Sha256"
-        },
-        "anonymous": {
-          "currentValue": true
-        },
-        "userName": {
-          "currentValue": "user1"
-        },
-        "password": {
-          "currentValue": "password1"
-        },
-        "certificateFile": {
-          "currentValue": "./certificate.pem"
-        },
-        "privateKeyFile": {
-          "currentValue": "./private_key.pem"
-        }
-      },
-      "tags": {
-        "1": {
-          "name": "CurrTime",
-          "options": {
-            "nodeId": {
-              "currentValue": "ns=1;i=2345"
-            }
-          },
-          "type": "datetime",
-          "address": 1,
-          "read": true,
-          "write": false,
-          "subscribed": false
+          "write": true,
+          "subscribed": true,
+          "type": "int"
         }
       }
     }

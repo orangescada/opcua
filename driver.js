@@ -22,7 +22,7 @@ const CustomDriver = require('./OpcUADriver.js');
 //*****************************************************************
 
 
-const log = false;
+const log = true;
 
 /**
  * logger - Log message to console
@@ -340,13 +340,17 @@ class ObjList {
 	 * getNewNodeId - generates new unique id for nodes|devices|tags list
 	 * @returns {int}
 	 */
-	getNewNodeId(){
-		let maxId=0;
-		for(let item in this.list){
-			let itemInt = parseInt(item);
-			if(itemInt && (itemInt > maxId)) maxId = itemInt;
+	getNewNodeId(dataObj){
+		if(dataObj.uid && !this.list[dataObj.uid]){
+			return dataObj.uid
+		}else{
+			let maxId=0;
+			for(let item in this.list){
+				let itemInt = parseInt(item);
+				if(itemInt && (itemInt > maxId)) maxId = itemInt;
+			}
+			return maxId + 1;
 		}
-		return maxId + 1;
 	}
 
 	/**
@@ -386,7 +390,7 @@ class ObjList {
 		}
 
 		newItem.options = newItemOptions;
-		let newNodeId = this.getNewNodeId();
+		let newNodeId = this.getNewNodeId(dataObj);
 		this.list[newNodeId] = newItem;
 		dataObj.uid = newNodeId;
 		let setAnswer = this.setItem(dataObj);
@@ -530,7 +534,7 @@ let nodeList = new ObjList(config.nodes, 'nodes');
 let deviceList = new ObjList(config.devices, 'devices', config.nodes);
 if(!config) process.exit(1);
 const {orangeScadaPort, orangeScadaHost, ssl, uid, password, version, isItemsEditable} = config.driver;
-let customDriver = new CustomDriver(deviceList, subscribeHandler, getConfig, setConfig);
+let customDriver = new CustomDriver(deviceList, subscribeHandler);
 
 
 //*****************************************************************
@@ -562,7 +566,7 @@ const serverReconnectTimeout = 5000;
 setInterval(tryConnectServer, serverReconnectTimeout);
 tryConnectServer();
 
-const serverNodataReconnectTimeout = 20000;
+const serverNodataReconnectTimeout = 40000;
 setInterval(serverNodataReconnect, serverNodataReconnectTimeout);
 
 const maxTransID = 65535;
@@ -892,12 +896,17 @@ function deleteDevice(dataObj){
  * @param {object} dataObj - request object
  */
 function getTags(dataObj){
-	if(customDriver.updateTagListFromDevice(dataObj)){
-		config = getConfig();
-		nodeList = new ObjList(config.nodes, 'nodes');
-		deviceList = new ObjList(config.devices, 'devices', config.nodes);
-	}
-	commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+	customDriver.updateTagListFromDevice(dataObj)
+	.then(configFlag => {
+		console.log("configFlag=", configFlag)
+		if(configFlag) {
+			/* config = getConfig();
+			nodeList = new ObjList(config.nodes, 'nodes');
+			deviceList = new ObjList(config.devices, 'devices', config.nodes);*/
+			setConfig(config);
+		}
+		commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+	})
 }
 
 /**

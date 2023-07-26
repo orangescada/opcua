@@ -5,7 +5,8 @@
   "main": "driver.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node driver.js"
+    "start": "node driver.js",
+    "installService": "node toServiceDriver.js"
   },
   "repository": {
     "type": "git",

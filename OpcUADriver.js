@@ -44,15 +44,11 @@ class CustomDriver{
    *  Class constructor
    *  @param {object} deviceList - list of devices and nodes
    *  @param {method} subscribeHandler - handler calling then subscribed value changes
-   *  @param {method} getConfigHandler - handler for reading driver config
-   *  @param {method} setConfigHandler - handler for writing driver config
    */
-  constructor(deviceList, subscribeHandler, getConfigHandler, setConfigHandler){
+  constructor(deviceList, subscribeHandler){
     this.deviceList = deviceList;
     this.connections = {};
     this.subscribeHandler = subscribeHandler;
-    this.getConfigHandler = getConfigHandler;
-    this.setConfigHandler = setConfigHandler;
     this.updateSubscribe();
   }
 
@@ -60,7 +56,7 @@ class CustomDriver{
     let device = this.deviceList.list ? this.deviceList.list[dataObj.uid] : null;
     if(!device) return {active: false};
     dataObj.deviceUid = dataObj.uid;
-    let firstTag = Object.keys(device.tags)[0];
+    let firstTag = device.tags ? Object.keys(device.tags)[0] : undefined;
     dataObj.tags = firstTag ? [firstTag] : [];
     let fullDeviceName = this.getFullDeviceAddress(dataObj.uid);
     if(!this.connections[fullDeviceName]){
@@ -151,19 +147,94 @@ class CustomDriver{
    * @returns {boolean} true if config has updated, otherwise false
    */
   updateTagListFromDevice(dataObj){
-    /*let config = this.getConfigHandler();
-    ***Update config here***
-    this.setConfigHandler(config);*/
-    console.log("updateTagListFromDevice", dataObj) //deviceUid
-    const fullDeviceName = this.getFullDeviceAddress(dataObj.deviceUid);
-    if(this.deviceList.list[dataObj.deviceUid]?.options.browseTrigger?.currentValue !== "Start") return false;
-    if(!fullDeviceName) return false;
-    const session = this.connections[fullDeviceName]?.session;
-    if(!session) return false;
-    
-    this.browseTags(session)
-    .then(browseTags => console.log("browseTags=", browseTags));
-    return false;
+    return new Promise(resolve => {
+      const fullDeviceName = this.getFullDeviceAddress(dataObj.deviceUid);
+      if(this.deviceList.list[dataObj.deviceUid]?.options.browseTrigger?.currentValue !== "Start") {
+        resolve(false);
+        return;
+      }
+      if(!fullDeviceName) {
+        resolve(false);
+        return;
+      }
+
+      const session = this.connections[fullDeviceName]?.session;
+      const createConnectPromise = session ? Promise.resolve() : this.createConnect([], dataObj.deviceUid)
+
+      createConnectPromise
+      .then( _ => {
+        const session = this.connections[fullDeviceName]?.session;
+        return this.browseTagsIter(session)
+      })
+      .then(browseTags => this.populateDevice(dataObj, browseTags))
+      .then( _ => resolve(true))
+      .catch( _ => 
+        resolve(false)
+      )
+    })
+  }
+
+  // bool int float datetime string 
+  getTagType(nodeType) {
+    switch(nodeType){
+      case DataType.Null: 
+      case DataType.String: 
+        return 'string';
+      case DataType.Boolean:
+        return 'bool';
+      case DataType.SByte:
+      case DataType.Byte:
+      case DataType.Int16:
+      case DataType.UInt16:
+      case DataType.Int32:
+      case DataType.UInt32:
+      case DataType.Int64:
+      case DataType.UInt64:
+        return 'int';
+      case DataType.Float:
+      case DataType.Double:
+        return 'float';
+      case DataType.DateTime:
+        return 'datetime';
+      default: 
+        return 'string';
+    }
+  }
+
+  populateDevice(dataObj, browseTags) {
+    let device = this.deviceList.list ? this.deviceList.list[dataObj.deviceUid] : null;
+    if(device) {
+      const tagmap = [];
+      let maxTagId = 0;
+      if(browseTags) {
+        if(!device.tags) {
+          device.tags = {};
+        }
+        Object.keys(device.tags).forEach(tag => {
+          tagmap.push([tag, tag.name]);
+          const tagId = parseInt(tag);
+          if(tagId > maxTagId) maxTagId = tagId;
+        })
+        browseTags.forEach(browseTag => {
+          let tagUid = tagmap.find(tag => tag[1] === brosetwseTag.name);
+          if(!tagUid){
+            tagUid = ++maxTagId;
+            device.tags[tagUid] = {};
+            device.tags[tagUid].name = browseTag.name;
+            device.tags[tagUid].options = {
+              nodeId: {currentValue: ""},
+              nodeType: {currentValue: browseTag.type}
+            };
+            device.tags[tagUid].address = tagUid;
+            device.tags[tagUid].read = true;
+            device.tags[tagUid].write = true;
+          }
+          device.tags[tagUid].options.nodeId.currentValue = browseTag.nodeId;
+          device.tags[tagUid].type = this.getTagType(browseTag.type);
+        })
+      }
+      device.options.browseTrigger.currentValue = "Stop";
+    }
   }
 
   getNodeId(nodeId) {
@@ -176,15 +247,9 @@ class CustomDriver{
     return res;
   }
 
-  getNodeType(nodeId) {
-    if(nodeId.identifierType === NodeIdType.NUMERIC) return 'int';
-    return 'string';
-  }
-
-  browseTags(session, nodeToBrowse = "RootFolder", folder = "/", browseTags = []) {
+  browseTagsIter(session, nodeToBrowse = "RootFolder", folder = "", browseTags = []) {
     return new Promise(resolve => {
       let chain = Promise.resolve();
-      console.log("nodeToBrowse=", nodeToBrowse.value);
       chain = chain.then( _ => {
         return new Promise(resolve => {
           session.browse(nodeToBrowse)
@@ -198,15 +263,22 @@ class CustomDriver{
       chain = chain.then(browseResult => {
         if(browseResult) {
           browseResult.references.forEach(ref => {
-            console.log("ref.browseName.toString()", ref.browseName.toString())
+            const slashFolder = folder ? `${folder}/` : ""
             if(ref.nodeClass === NodeClass.Variable) { 
-              browseTags.push({
-                "name": ref.displayName.text,
-                "nodeId": this.getNodeId(ref.nodeId),
-                "type": this.getNodeType(ref.nodeId)
-              });
+              chain = chain.then( _ => {
+                return session.read({nodeId: ref.nodeId})
+              })
+              .then(data => {
+                browseTags.push({
+                  "name": `${slashFolder}${ref.displayName.text}`,
+                  "nodeId": this.getNodeId(ref.nodeId),
+                  "type": data?.value?.dataType ?? 0
+                });
+              })
             }
-            if(ref.nodeClass === NodeClass.Object) chain = chain.then( _ => this.browseTags(session, ref.nodeId, "/", browseTags))
+            if(ref.nodeClass === NodeClass.Object) {
+              chain = chain.then( _ => this.browseTagsIter(session, ref.nodeId, `${slashFolder}${ref.displayName.text}`, browseTags))
+            }
           })
         }
         chain = chain.then( _ => resolve(browseTags));
@@ -221,7 +293,7 @@ class CustomDriver{
     for(let item in this.deviceList.list){
       let dataObj = {};
       dataObj.deviceUid = item;
-      dataObj.tags = Object.keys(this.deviceList.list[item].tags);
+      dataObj.tags = this.deviceList.list[item].tags ? Object.keys(this.deviceList.list[item].tags) : [];
       const tags = this.deviceTagsToArray('read', this.deviceList.list[item], dataObj, true);
       const fullDeviceName = this.deviceList.list[item].options.endpointUrl.currentValue;
       const tagNames = tags.map(tag => tag.name);
@@ -280,6 +352,7 @@ class CustomDriver{
       
       try{
         tagItem.nodeId = tag.options.nodeId.currentValue;
+        tagItem.nodeType = tag.options.nodeType.currentValue;
         tagItem.endpointUrl = device.options.endpointUrl.currentValue;
         tagItem.deviceUid = dataObj.deviceUid;
         tagItem.type = tag.type;
@@ -304,22 +377,6 @@ class CustomDriver{
     return new Promise(resolve => resolve(tags.reduce((acc, tag) => {
       return [...acc, this.connections[fullDeviceName]?.tags[tag.name]?.value ?? null]
     }, [])))
-  }
-
-   getDataType(tag) {
-    switch(tag.type) {
-      case 'float':
-      case 'int': 
-        return DataType.Double;
-      case 'datetime':
-        return DataType.DateTime;
-      case 'bool':
-        return DataType.Boolean;
-      case 'string':
-        return DataType.String;
-      default: 
-        return DataType.Double;
-    }
   }
 
   getSetValue(tag) {
@@ -349,7 +406,7 @@ class CustomDriver{
                 statusCode: StatusCodes.Good,
                 sourceTimestamp: new Date(),
                 value: {
-                  dataType: this.getDataType(tag),
+                  dataType: tag.nodeType,
                   value: this.getSetValue(tag)
                 }
               }
@@ -358,8 +415,11 @@ class CustomDriver{
               if (code === StatusCodes.Good){
                 resolve();
               }else{
-                reject(`${errWriteFail}, error code=${code._value}`);
+                reject(`${errWriteFail}, error=${code._description}`);
               }
+            })
+            .catch(_error => {
+              reject(errWriteFail);
             })
           }
         })
@@ -445,8 +505,8 @@ class CustomDriver{
     })
   }
 
-  getSecurityMode(tags) {
-    const securityMode = this.getDeviceSecurityMode(tags);
+  getSecurityMode(deviceUid) {
+    const securityMode = this.getDeviceSecurityMode(deviceUid);
     switch(securityMode) {
       case 'Sign': return MessageSecurityMode.Sign;
       case 'SignAndEncrypt': return MessageSecurityMode.SignAndEncrypt;
@@ -454,8 +514,8 @@ class CustomDriver{
     }
   }
 
-  getSecurityPolicy(tags) {
-    const securityPolicy = this.getDeviceSecurityPolicy(tags);
+  getSecurityPolicy(deviceUid) {
+    const securityPolicy = this.getDeviceSecurityPolicy(deviceUid);
     switch(securityPolicy) {
       case 'Aes128_Sha256_RsaOaep': return SecurityPolicy.Aes128_Sha256_RsaOaep;
       case 'Aes256_Sha256_RsaPss': return SecurityPolicy.Aes256_Sha256_RsaPss;
@@ -478,14 +538,15 @@ class CustomDriver{
    */
   createConnect(tags, deviceUid){
     return new Promise((resolve, reject) => {
-      const timeout = this.getTimeout(tags) || defaultTimeout;
+      const timeout = this.getTimeout(deviceUid) || defaultTimeout;
+      const certificateFile = this.getCertificateFile(deviceUid) 
       const client = OPCUAClient.create({
         endpointMustExist: false,
-        applicationUri: 'orangescada.opcua',
-        securityMode: this.getSecurityMode(tags),
-        securityPolicy: this.getSecurityPolicy(tags),
-        certificateFile: this.getCertificateFile(tags),
-        privateKeyFile: this.getPrivateKeyFile(tags),
+        applicationUri: certificateFile ? 'orangescada.opcua': undefined,
+        securityMode: this.getSecurityMode(deviceUid),
+        securityPolicy: this.getSecurityPolicy(deviceUid),
+        certificateFile: certificateFile,
+        privateKeyFile: this.getPrivateKeyFile(deviceUid),
         connectionStrategy: {
             maxRetry: 1,
             initialDelay: 2000,
@@ -493,16 +554,16 @@ class CustomDriver{
         }
       });
 
-      const fullDeviceName = this.getFullDeviceAddress(tags.length ? tags : deviceUid);
+      const fullDeviceName = this.getFullDeviceAddress(deviceUid);
       this.connections[fullDeviceName] = {};
       this.connections[fullDeviceName].client = client;
       this.connections[fullDeviceName].tags = {};
       const userIdentityInfo = 
-        this.getAnonymous(tags)
+        this.getAnonymous(deviceUid)
         ? {type: UserTokenType.Anonymous}
         : {type: UserTokenType.UserName,
-           userName: this.getUserName(tags),
-           password: this.getPassword(tags)};
+           userName: this.getUserName(deviceUid),
+           password: this.getPassword(deviceUid)};
       client.fullDeviceAddress = fullDeviceName;
       client.connected = false;
       client.connect(fullDeviceName)
@@ -512,7 +573,7 @@ class CustomDriver{
         return session.createSubscription2({
           requestedPublishingInterval: 1000,
           requestedLifetimeCount: 100, // 1000ms *100 every 2 minutes or so
-          requestedMaxKeepAliveCount: 10,// every 10 seconds
+          requestedMaxKeepAliveCount: 10, // every 10 seconds
           maxNotificationsPerPublish: 10,
           publishingEnabled: true,
           priority: 10
@@ -619,38 +680,37 @@ class CustomDriver{
     return this.getTagProperty(tags, 'deviceUid');
   }
 
-  getDeviceProperty(tags, property){
-    const deviceId = this.getDeviceUid(tags);
-    if(!deviceId) return null;
-    return this.deviceList.list[deviceId]?.options[property]?.currentValue ?? null;
+  getDeviceProperty(deviceUid, property){
+    if(!deviceUid) return null;
+    return this.deviceList.list[deviceUid]?.options[property]?.currentValue ?? null;
   }
 
-  getDeviceSecurityMode(tags){
-    return this.getDeviceProperty(tags, 'securityMode');
+  getDeviceSecurityMode(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'securityMode');
   }
 
-  getDeviceSecurityPolicy(tags){
-    return this.getDeviceProperty(tags, 'securityPolicy');
+  getDeviceSecurityPolicy(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'securityPolicy');
   }
 
-  getCertificateFile(tags){
-    return this.getDeviceProperty(tags, 'certificateFile');
+  getCertificateFile(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'certificateFile');
   }
 
-  getPrivateKeyFile(tags){
-    return this.getDeviceProperty(tags, 'privateKeyFile');
+  getPrivateKeyFile(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'privateKeyFile');
   }
 
-  getAnonymous(tags){
-    return this.getDeviceProperty(tags, 'anonymous');
+  getAnonymous(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'anonymous') ?? true;
   }
 
-  getUserName(tags){
-    return this.getDeviceProperty(tags, 'userName');
+  getUserName(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'userName');
   }
 
-  getPassword(tags){
-    return this.getDeviceProperty(tags, 'password');
+  getPassword(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'password');
   }
 
 
@@ -659,8 +719,8 @@ class CustomDriver{
    * @param {array of objects} tags - tags objects array with options for requests
    * @returns {int}
    */
-  getTimeout(tags){
-    return this.getDeviceProperty(tags, 'timeout');
+  getTimeout(deviceUid){
+    return this.getDeviceProperty(deviceUid, 'timeout');
   }
 
   /**
