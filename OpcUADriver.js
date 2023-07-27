@@ -211,12 +211,15 @@ class CustomDriver{
           device.tags = {};
         }
         Object.keys(device.tags).forEach(tag => {
-          tagmap.push([tag, tag.name]);
+          tagmap.push([tag, device.tags[tag].name]);
           const tagId = parseInt(tag);
           if(tagId > maxTagId) maxTagId = tagId;
         })
         browseTags.forEach(browseTag => {
-          let tagUid = tagmap.find(tag => tag[1] === brosetwseTag.name);
+          let tagUid = tagmap.find(tag => tag[1] === browseTag.name);
+          if(tagUid){
+            tagUid = tagUid[0]
+          }
           if(!tagUid){
             tagUid = ++maxTagId;
             device.tags[tagUid] = {};
@@ -352,7 +355,7 @@ class CustomDriver{
       
       try{
         tagItem.nodeId = tag.options.nodeId.currentValue;
-        tagItem.nodeType = tag.options.nodeType.currentValue;
+        tagItem.nodeType = tag.options.nodeType?.currentValue ?? 0;
         tagItem.endpointUrl = device.options.endpointUrl.currentValue;
         tagItem.deviceUid = dataObj.deviceUid;
         tagItem.type = tag.type;
@@ -539,13 +542,11 @@ class CustomDriver{
   createConnect(tags, deviceUid){
     return new Promise((resolve, reject) => {
       const timeout = this.getTimeout(deviceUid) || defaultTimeout;
-      const certificateFile = this.getCertificateFile(deviceUid) 
       const client = OPCUAClient.create({
         endpointMustExist: false,
-        applicationUri: certificateFile ? 'orangescada.opcua': undefined,
         securityMode: this.getSecurityMode(deviceUid),
         securityPolicy: this.getSecurityPolicy(deviceUid),
-        certificateFile: certificateFile,
+        certificateFile: this.getCertificateFile(deviceUid),
         privateKeyFile: this.getPrivateKeyFile(deviceUid),
         connectionStrategy: {
             maxRetry: 1,
@@ -636,7 +637,9 @@ class CustomDriver{
           value = value.toString();
       }
     }
-    this.connections[tag.endpointUrl].tags[tag.name].value = value ?? null;
+    if (this.connections[tag.endpointUrl]) {
+      this.connections[tag.endpointUrl].tags[tag.name].value = value ?? null;
+    }
     
     if(tag.subscribed){
       let sendSubscribedObj = {};
@@ -646,8 +649,6 @@ class CustomDriver{
       this.subscribeHandler(sendSubscribedObj);
     }
   }
-
-
 
   /**
    * getTagProperty - common function-getter for device property

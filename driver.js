@@ -898,11 +898,7 @@ function deleteDevice(dataObj){
 function getTags(dataObj){
 	customDriver.updateTagListFromDevice(dataObj)
 	.then(configFlag => {
-		console.log("configFlag=", configFlag)
 		if(configFlag) {
-			/* config = getConfig();
-			nodeList = new ObjList(config.nodes, 'nodes');
-			deviceList = new ObjList(config.devices, 'devices', config.nodes);*/
 			setConfig(config);
 		}
 		commonHandler(dataObj, deviceList.getTags.bind(deviceList));

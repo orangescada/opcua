@@ -99,7 +99,7 @@
   },
   "nodes": {
     "1": {
-      "name": "OPCUA Group",
+      "name": "1",
       "options": {}
     }
   },
@@ -110,7 +110,7 @@
       "active": true,
       "options": {
         "endpointUrl": {
-          "currentValue": "opc.tcp://localhost:53530/OPCUA/SimulationServer"
+          "currentValue": "opc.tcp://DESKTOP-TMRFNLR:53530/OPCUA/SimulationServer"
         },
         "browseTrigger": {
           "currentValue": "Stop"
@@ -142,7 +142,7 @@
       },
       "tags": {
         "1": {
-          "name": "Counter",
+          "name": "Objects/Simulation/Counter",
           "options": {
             "nodeId": {
               "currentValue": "ns=3;i=1002"
@@ -151,11 +151,10 @@
               "currentValue": 6
             }
           },
+          "type": "int",
           "address": 1,
           "read": true,
-          "write": true,
-          "subscribed": true,
-          "type": "int"
+          "write": true
         }
       }
     }
