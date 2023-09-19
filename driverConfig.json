@@ -94,6 +94,11 @@
       "nodeType": {
         "type": "number",
         "name": "Node Type Code"
+      },
+      "arrayIndex": {
+        "type": "number",
+        "name": "Array index",
+        "currentValue": -1
       }
     }
   },
@@ -141,21 +146,6 @@
         }
       },
       "tags": {
-        "1": {
-          "name": "Objects/Simulation/Counter",
-          "options": {
-            "nodeId": {
-              "currentValue": "ns=3;i=1002"
-            },
-            "nodeType": {
-              "currentValue": 6
-            }
-          },
-          "type": "int",
-          "address": 1,
-          "read": true,
-          "write": true
-        }
       }
     }
   }

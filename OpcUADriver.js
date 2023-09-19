@@ -226,13 +226,15 @@ class CustomDriver{
             device.tags[tagUid].name = browseTag.name;
             device.tags[tagUid].options = {
               nodeId: {currentValue: ""},
-              nodeType: {currentValue: browseTag.type}
+              nodeType: {currentValue: browseTag.type},
+              arrayIndex: {currentValue: browseTag.arrayIndex}
             };
             device.tags[tagUid].address = tagUid;
             device.tags[tagUid].read = true;
             device.tags[tagUid].write = true;
           }
           device.tags[tagUid].options.nodeId.currentValue = browseTag.nodeId;
+          device.tags[tagUid].options.arrayIndex.currentValue = browseTag.arrayIndex;
           device.tags[tagUid].type = this.getTagType(browseTag.type);
         })
       }
@@ -266,22 +268,30 @@ class CustomDriver{
       chain = chain.then(browseResult => {
         if(browseResult) {
           browseResult.references.forEach(ref => {
+            // if(folder.includes('Objects/StaticData/StaticArrayVariables')) console.log('ref=', ref);
             const slashFolder = folder ? `${folder}/` : ""
-            if(ref.nodeClass === NodeClass.Variable) { 
+            if(ref.nodeClass === NodeClass.Variable || ref.nodeClass === NodeClass.Object) { 
               chain = chain.then( _ => {
                 return session.read({nodeId: ref.nodeId})
               })
               .then(data => {
-                browseTags.push({
-                  "name": `${slashFolder}${ref.displayName.text}`,
-                  "nodeId": this.getNodeId(ref.nodeId),
-                  "type": data?.value?.dataType ?? 0
-                });
+                // if(folder.includes('Objects/Simulation/new')) console.log('data=', data);
+                const isArray = data?.value?.arrayType === 1;
+                const arraySize = data?.value?.value ? data?.value?.value.toString().split(',').length : 1;
+                const tagsCount = isArray ? arraySize : 1;
+                for (let i = 0; i < tagsCount; i++) {
+                  browseTags.push({
+                    "name": `${slashFolder}${ref.displayName.text}/_value${isArray ? `[${i}]` : ''}`,
+                    "nodeId": this.getNodeId(ref.nodeId),
+                    "type": data?.value?.dataType ?? 0,
+                    "arrayIndex": isArray ? i : -1
+                  });
+                }
               })
             }
-            if(ref.nodeClass === NodeClass.Object) {
+            // if(ref.nodeClass === NodeClass.Object) {
               chain = chain.then( _ => this.browseTagsIter(session, ref.nodeId, `${slashFolder}${ref.displayName.text}`, browseTags))
-            }
+            // }
           })
         }
         chain = chain.then( _ => resolve(browseTags));
@@ -356,6 +366,7 @@ class CustomDriver{
       try{
         tagItem.nodeId = tag.options.nodeId.currentValue;
         tagItem.nodeType = tag.options.nodeType?.currentValue ?? 0;
+        tagItem.arrayIndex = tag.options.arrayIndex?.currentValue ?? -1;
         tagItem.endpointUrl = device.options.endpointUrl.currentValue;
         tagItem.deviceUid = dataObj.deviceUid;
         tagItem.type = tag.type;
@@ -445,7 +456,9 @@ class CustomDriver{
   }
 
   checkIfTagsInMonitor(tags, fullDeviceName) {
-    const noMonitoredTags = tags.filter(tag => !this.connections[fullDeviceName]?.tags[tag.name]);
+    const noMonitoredTags = tags.filter(
+      tag => !this.connections[fullDeviceName]?.tags[tag.name]
+    );
     if(noMonitoredTags.length > 0) {
       const subscription = this.connections[fullDeviceName]?.subscription;
       this.addMonitoredTags(subscription, noMonitoredTags, fullDeviceName);
@@ -559,6 +572,7 @@ class CustomDriver{
       this.connections[fullDeviceName] = {};
       this.connections[fullDeviceName].client = client;
       this.connections[fullDeviceName].tags = {};
+      this.connections[fullDeviceName].ns = {};
       const userIdentityInfo = 
         this.getAnonymous(deviceUid)
         ? {type: UserTokenType.Anonymous}
@@ -600,7 +614,14 @@ class CustomDriver{
   addMonitoredTags (subscription, tags, fullDeviceName) {
     if(!subscription) return;
     tags.forEach(tag => {
-      this.connections[fullDeviceName].tags[tag.name] = tag
+      if (this.connections[fullDeviceName].ns[tag.nodeId]){
+        this.connections[fullDeviceName].tags[tag.name] = tag;
+        this.connections[fullDeviceName].ns[tag.nodeId].tags.push(tag)
+        return;
+      }
+      this.connections[fullDeviceName].tags[tag.name] = tag;
+      this.connections[fullDeviceName].ns[tag.nodeId] = {};
+      this.connections[fullDeviceName].ns[tag.nodeId].tags = [tag]
       subscription.monitor({
         nodeId: tag.nodeId,
         attributeId: AttributeIds.Value
@@ -620,11 +641,12 @@ class CustomDriver{
  
   /**
    * response - handler method for incoming packets from slave devices
-   * @param {object} client - socket object 
+   * @param {object} client - socket object
    * @param {Buffer} data - raw data array
    */
   response(data, tag) {
     let value = data?.value?.value ?? null;
+    // if (tag.nodeId === 'ns=5;s=Int32Array') console.log('tag, value=', tag, value);
     if(value !== null){
       switch(tag.type){ 
         case 'datetime':
@@ -638,16 +660,25 @@ class CustomDriver{
       }
     }
     if (this.connections[tag.endpointUrl]) {
-      this.connections[tag.endpointUrl].tags[tag.name].value = value ?? null;
+      this.connections[tag.endpointUrl].ns[tag.nodeId].tags.forEach(tag => {
+        this.connections[tag.endpointUrl].tags[tag.name].value = this.getValueByIndex(tag, value);
+      })
     }
     
     if(tag.subscribed){
       let sendSubscribedObj = {};
       sendSubscribedObj.deviceUid = tag.deviceUid;
       sendSubscribedObj.values = {};
-      sendSubscribedObj.values[tag.name] = value ?? null;
+      sendSubscribedObj.values[tag.name] = this.getValueByIndex(tag, value);
       this.subscribeHandler(sendSubscribedObj);
     }
+  }
+
+  getValueByIndex (tag, value) {
+    if(!value) return null;
+    if(tag.arrayIndex === -1) return value
+    const values = value.split(',')
+    return tag.arrayIndex < values.length ? values[tag.arrayIndex] : null;
   }
 
   /**
