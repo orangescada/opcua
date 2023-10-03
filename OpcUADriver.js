@@ -13,9 +13,7 @@ const {
   StatusCodes,
   DataType,
   UserTokenType,
-  NodeClass,
-  NodeIdType,
-  coerceVariantType
+  NodeClass
 } = require("node-opcua");
 const moment = require("moment/moment");
 
@@ -45,13 +43,15 @@ class CustomDriver{
    *  @param {object} deviceList - list of devices and nodes
    *  @param {method} subscribeHandler - handler calling then subscribed value changes
    */
-  constructor(deviceList, subscribeHandler){
+  constructor(deviceList, subscribeHandler, logger){
     this.deviceList = deviceList;
     this.connections = {};
     this.subscribeHandler = subscribeHandler;
+    this.logger = logger
     this.updateSubscribe();
   }
 
+  // returns device status {active: true | false}
   getDeviceStatus(dataObj){
     let device = this.deviceList.list ? this.deviceList.list[dataObj.uid] : null;
     if(!device) return {active: false};
@@ -132,6 +132,7 @@ class CustomDriver{
     })
   }
 
+  // restart opc connection on change tags or connections params
   restartDevice(dataObj) {
     const deviceId = dataObj.cmd === 'setTag' ? dataObj.deviceUid : dataObj.uid;
     const fullDeviceName = this.getFullDeviceAddress(deviceId);
@@ -174,7 +175,7 @@ class CustomDriver{
     })
   }
 
-  // bool int float datetime string 
+  // map opc type to Orangescada tag type
   getTagType(nodeType) {
     switch(nodeType){
       case DataType.Null: 
@@ -201,6 +202,7 @@ class CustomDriver{
     }
   }
 
+  // fill driver config with browsed opc tags, reset browse trigger to Stop
   populateDevice(dataObj, browseTags) {
     let device = this.deviceList.list ? this.deviceList.list[dataObj.deviceUid] : null;
     if(device) {
@@ -242,6 +244,7 @@ class CustomDriver{
     }
   }
 
+  // get opc node id
   getNodeId(nodeId) {
     let res = "";
     if(nodeId.namespace) res = `ns=${nodeId.namespace};`;
@@ -252,6 +255,7 @@ class CustomDriver{
     return res;
   }
 
+  // one level iteration of opc tags search, run in recursion
   browseTagsIter(session, nodeToBrowse = "RootFolder", folder = "", browseTags = []) {
     return new Promise(resolve => {
       let chain = Promise.resolve();
@@ -260,7 +264,7 @@ class CustomDriver{
           session.browse(nodeToBrowse)
           .then(browseResult => resolve(browseResult))
           .catch(err => {
-            console.log("browse error=", err)
+            this.logger("browse error=", err)
             resolve(null);
           })
         })
@@ -268,14 +272,12 @@ class CustomDriver{
       chain = chain.then(browseResult => {
         if(browseResult) {
           browseResult.references.forEach(ref => {
-            // if(folder.includes('Objects/StaticData/StaticArrayVariables')) console.log('ref=', ref);
             const slashFolder = folder ? `${folder}/` : ""
             if(ref.nodeClass === NodeClass.Variable || ref.nodeClass === NodeClass.Object) { 
               chain = chain.then( _ => {
                 return session.read({nodeId: ref.nodeId})
               })
               .then(data => {
-                // if(folder.includes('Objects/Simulation/new')) console.log('data=', data);
                 const isArray = data?.value?.arrayType === 1;
                 const arraySize = data?.value?.value ? data?.value?.value.toString().split(',').length : 1;
                 const tagsCount = isArray ? arraySize : 1;
@@ -289,9 +291,7 @@ class CustomDriver{
                 }
               })
             }
-            // if(ref.nodeClass === NodeClass.Object) {
               chain = chain.then( _ => this.browseTagsIter(session, ref.nodeId, `${slashFolder}${ref.displayName.text}`, browseTags))
-            // }
           })
         }
         chain = chain.then( _ => resolve(browseTags));
@@ -317,7 +317,7 @@ class CustomDriver{
       })
       if(tags.length > 0){
         this.opcuaReadRequest(tags, item)
-        .catch(err => console.log(err))
+        .catch(err => logger(err))
       }
     }
   }
@@ -341,6 +341,7 @@ class CustomDriver{
     });
   }
 
+  // converts tags object to array, add tag params for next process
   deviceTagsToArray(cmd, device, dataObj, subscribeOnly = false) {
     let tags = [];
     for(let item of dataObj.tags){
@@ -387,13 +388,24 @@ class CustomDriver{
     return tags;
   }
 
+  // returns array with current tags values
   opcuaGetValues(tags, fullDeviceName) {
     return new Promise(resolve => resolve(tags.reduce((acc, tag) => {
       return [...acc, this.connections[fullDeviceName]?.tags[tag.name]?.value ?? null]
     }, [])))
   }
 
+  // returns value or array (depends on set tag is a part of array or not) with set values
   getSetValue(tag) {
+    if(tag.arrayIndex < 0) return this.getOneSetValue(tag);
+    const originalValue = this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue;
+    const valArray = originalValue.split(',');
+    valArray[tag.arrayIndex] = this.getOneSetValue(tag);
+    return valArray;
+  }
+
+  // converts set value to tag type
+  getOneSetValue(tag) {
     switch (tag.type) {
       case 'datetime': return moment(tag.setValue, dateTimeFormat).toDate();
       case 'bool': return !!tag.setValue;
@@ -401,6 +413,7 @@ class CustomDriver{
     }
   }
 
+  // write set tags to opc
   opcuaSetValues(tags, fullDeviceName) {
     return new Promise((resolve, reject) => {
       const session = this.connections[fullDeviceName]?.session;
@@ -455,6 +468,7 @@ class CustomDriver{
     return this.opcuaRequest(tags, this.opcuaGetValues, deviceUid);
   }
 
+  // checks unmonitored tags, add whem to subscribe
   checkIfTagsInMonitor(tags, fullDeviceName) {
     const noMonitoredTags = tags.filter(
       tag => !this.connections[fullDeviceName]?.tags[tag.name]
@@ -474,6 +488,7 @@ class CustomDriver{
     return this.opcuaRequest(tags, this.opcuaSetValues)
   }
 
+  // common method for read/write tags values
   opcuaRequest(tags, handler, deviceUid) {
     return new Promise((resolve,reject) => {
       try{
@@ -497,7 +512,7 @@ class CustomDriver{
     })
   }
 
-
+  // method for close session
   closeSession(fullDeviceAddress) {
     return new Promise(resolve => {
       if(!this.connections[fullDeviceAddress]?.session){
@@ -509,6 +524,7 @@ class CustomDriver{
     })
   }
 
+  // method for destroy connect with opc
   destroyConnect(client, errTxt, reject) {
     this.closeSession(client.fullDeviceAddress)
     .then(() => client.disconnect())
@@ -521,6 +537,7 @@ class CustomDriver{
     })
   }
 
+  // get security mode for opc connection
   getSecurityMode(deviceUid) {
     const securityMode = this.getDeviceSecurityMode(deviceUid);
     switch(securityMode) {
@@ -530,6 +547,7 @@ class CustomDriver{
     }
   }
 
+  // get security policy for opc connection
   getSecurityPolicy(deviceUid) {
     const securityPolicy = this.getDeviceSecurityPolicy(deviceUid);
     switch(securityPolicy) {
@@ -611,11 +629,13 @@ class CustomDriver{
     });a
   }
 
+  // add subscibe for monitored tags
   addMonitoredTags (subscription, tags, fullDeviceName) {
     if(!subscription) return;
     tags.forEach(tag => {
       if (this.connections[fullDeviceName].ns[tag.nodeId]){
         this.connections[fullDeviceName].tags[tag.name] = tag;
+        tag.value = this.getValueByIndex(tag, this.connections[fullDeviceName].ns[tag.nodeId].originalValue);
         this.connections[fullDeviceName].ns[tag.nodeId].tags.push(tag)
         return;
       }
@@ -646,7 +666,6 @@ class CustomDriver{
    */
   response(data, tag) {
     let value = data?.value?.value ?? null;
-    // if (tag.nodeId === 'ns=5;s=Int32Array') console.log('tag, value=', tag, value);
     if(value !== null){
       switch(tag.type){ 
         case 'datetime':
@@ -656,11 +675,12 @@ class CustomDriver{
           value = value ? 1 : 0
           break;
         default:
-          value = value.toString();
+          value = this.correct64(tag, value)
       }
     }
     if (this.connections[tag.endpointUrl]) {
       this.connections[tag.endpointUrl].ns[tag.nodeId].tags.forEach(tag => {
+        this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue = value;
         this.connections[tag.endpointUrl].tags[tag.name].value = this.getValueByIndex(tag, value);
       })
     }
@@ -674,6 +694,61 @@ class CustomDriver{
     }
   }
 
+  // correction value for 64bit tags
+  correct64 (tag, value) {
+    if(tag.nodeType !== DataType.Int64 && tag.nodeType !== DataType.UInt64) {
+      return value.toString();
+    }
+    if (tag.nodeType == DataType.Int64) {
+      return this.int64HiLoToString(value[0], value[1])
+    } else {
+      return this.uint64HiLoToString(value[0], value[1])
+    }
+  }
+
+  // returns string interpretation for int64 value
+  int64HiLoToString(hi,lo){
+    hi>>>=0;
+    lo>>>=0;
+    let sign="";
+    if(hi&0x80000000){
+      sign="-";
+      lo=(0x100000000-lo)>>>0;
+      hi=0xffffffff-hi+ +(lo===0);
+    }
+    let dhi = ~~(hi/0x5af4);
+    let dhirem = hi % 0x5af4;
+    let dlo= dhirem * 0x100000000 + dhi * 0xef85c000 + lo;
+    dhi += ~~(dlo / 0x5af3107a4000);
+    dlo %= 0x5af3107a4000;
+    let slo = "" + dlo;
+    if(dhi){
+      slo="000000000000000000".slice(0, 14 - slo.length) + dlo;
+      return sign + dhi + slo;
+    }else{
+      return sign + slo;
+    }
+  }
+
+    // returns string interpretation for uint64 value
+  uint64HiLoToString(hi,lo){
+    hi>>>=0;
+    lo>>>=0;
+    let dhi = ~~(hi/0x5af4);
+    let dhirem = hi % 0x5af4;
+    let dlo= dhirem * 0x100000000 + dhi * 0xef85c000 + lo;
+    dhi += ~~(dlo / 0x5af3107a4000);
+    dlo %= 0x5af3107a4000;
+    let slo = "" + dlo;
+    if(dhi){
+      slo="000000000000000000".slice(0, 14 - slo.length) + dlo;
+      return dhi + slo;
+    }else{
+      return slo;
+    }
+  }
+
+  // split value from tags array
   getValueByIndex (tag, value) {
     if(!value) return null;
     if(tag.arrayIndex === -1) return value
@@ -712,35 +787,43 @@ class CustomDriver{
     return this.getTagProperty(tags, 'deviceUid');
   }
 
+  // common method getting property of device
   getDeviceProperty(deviceUid, property){
     if(!deviceUid) return null;
     return this.deviceList.list[deviceUid]?.options[property]?.currentValue ?? null;
   }
 
+  // get securityMode for opc server
   getDeviceSecurityMode(deviceUid){
     return this.getDeviceProperty(deviceUid, 'securityMode');
   }
 
+  // get securityPolicy for opc server
   getDeviceSecurityPolicy(deviceUid){
     return this.getDeviceProperty(deviceUid, 'securityPolicy');
   }
 
+  // get certificateFile for opc server
   getCertificateFile(deviceUid){
     return this.getDeviceProperty(deviceUid, 'certificateFile');
   }
 
+  // get privateKeyFile for opc server
   getPrivateKeyFile(deviceUid){
     return this.getDeviceProperty(deviceUid, 'privateKeyFile');
   }
 
+  // get anonymous mode for opc server
   getAnonymous(deviceUid){
     return this.getDeviceProperty(deviceUid, 'anonymous') ?? true;
   }
 
+  // get userName for opc server
   getUserName(deviceUid){
     return this.getDeviceProperty(deviceUid, 'userName');
   }
 
+  // get password for opc server
   getPassword(deviceUid){
     return this.getDeviceProperty(deviceUid, 'password');
   }

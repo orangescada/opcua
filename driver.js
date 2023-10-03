@@ -534,7 +534,7 @@ let nodeList = new ObjList(config.nodes, 'nodes');
 let deviceList = new ObjList(config.devices, 'devices', config.nodes);
 if(!config) process.exit(1);
 const {orangeScadaPort, orangeScadaHost, ssl, uid, password, version, isItemsEditable} = config.driver;
-let customDriver = new CustomDriver(deviceList, subscribeHandler);
+let customDriver = new CustomDriver(deviceList, subscribeHandler, logger);
 
 
 //*****************************************************************
