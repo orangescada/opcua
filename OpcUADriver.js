@@ -399,7 +399,7 @@ class CustomDriver{
   getSetValue(tag) {
     if(tag.arrayIndex < 0) return this.getOneSetValue(tag);
     const originalValue = this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue;
-    const valArray = originalValue.split(',');
+    const valArray = [...originalValue]
     valArray[tag.arrayIndex] = this.getOneSetValue(tag);
     return valArray;
   }
@@ -407,7 +407,7 @@ class CustomDriver{
   // converts set value to tag type
   getOneSetValue(tag) {
     switch (tag.type) {
-      case 'datetime': return moment(tag.setValue, dateTimeFormat).toDate();
+      case 'datetime': return moment.utc(tag.setValue, dateTimeFormat).toDate();
       case 'bool': return !!tag.setValue;
       default: return tag.setValue;
     }
@@ -426,6 +426,7 @@ class CustomDriver{
           if(tag.err){
             reject(tag.err)
           }else{
+            const newValue = this.getSetValue(tag)
             session.write({
               nodeId: tag.nodeId,
               attributeId: AttributeIds.Value,
@@ -434,7 +435,7 @@ class CustomDriver{
                 sourceTimestamp: new Date(),
                 value: {
                   dataType: tag.nodeType,
-                  value: this.getSetValue(tag)
+                  value: newValue
                 }
               }
             })
@@ -666,32 +667,23 @@ class CustomDriver{
    */
   response(data, tag) {
     let value = data?.value?.value ?? null;
-    if(value !== null){
-      switch(tag.type){ 
-        case 'datetime':
-          value = moment(new Date(value)).unix() * 1000;
-          break;
-        case 'bool':
-          value = value ? 1 : 0
-          break;
-        default:
-          value = this.correct64(tag, value)
-      }
-    }
+
+    const sendSubscribedObj = {};
+    sendSubscribedObj.deviceUid = tag.deviceUid;
+    sendSubscribedObj.values = {};
+
     if (this.connections[tag.endpointUrl]) {
       this.connections[tag.endpointUrl].ns[tag.nodeId].tags.forEach(tag => {
         this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue = value;
         this.connections[tag.endpointUrl].tags[tag.name].value = this.getValueByIndex(tag, value);
+        if(tag.subscribed){
+          sendSubscribedObj.values[tag.name] = this.getValueByIndex(tag, value);
+        }
       })
     }
     
-    if(tag.subscribed){
-      let sendSubscribedObj = {};
-      sendSubscribedObj.deviceUid = tag.deviceUid;
-      sendSubscribedObj.values = {};
-      sendSubscribedObj.values[tag.name] = this.getValueByIndex(tag, value);
-      this.subscribeHandler(sendSubscribedObj);
-    }
+    if(Object.keys(sendSubscribedObj.values).length > 0) this.subscribeHandler(sendSubscribedObj);
+
   }
 
   // correction value for 64bit tags
@@ -748,12 +740,25 @@ class CustomDriver{
     }
   }
 
+  getValueByType (tag, value) {
+    if(value !== null){
+      switch(tag.type){ 
+        case 'datetime':
+          return moment(new Date(value)).unix() * 1000;
+        case 'bool':
+          return value ? 1 : 0
+        default:
+          return this.correct64(tag, value)
+      }
+    }
+  }
+
   // split value from tags array
   getValueByIndex (tag, value) {
-    if(!value) return null;
-    if(tag.arrayIndex === -1) return value
-    const values = value.split(',')
-    return tag.arrayIndex < values.length ? values[tag.arrayIndex] : null;
+    if(value === undefined) return null;
+    if(tag.arrayIndex === -1) return this.getValueByType(tag, value)
+    const values = [...value]
+    return tag.arrayIndex < values.length ? this.getValueByType(tag, values[tag.arrayIndex]) : null;
   }
 
   /**
