@@ -390,8 +390,12 @@ class CustomDriver{
 
   // returns array with current tags values
   opcuaGetValues(tags, fullDeviceName) {
+    const getValue = (tag) => {
+      if(!tag) return null
+      return tag.value ?? (tag.err ? {"errorTxt": tag.err} : null)
+    }
     return new Promise(resolve => resolve(tags.reduce((acc, tag) => {
-      return [...acc, this.connections[fullDeviceName]?.tags[tag.name]?.value ?? null]
+      return [...acc, getValue(this.connections[fullDeviceName]?.tags[tag.name])]
     }, [])))
   }
 
@@ -667,7 +671,6 @@ class CustomDriver{
    */
   response(data, tag) {
     let value = data?.value?.value ?? null;
-
     const sendSubscribedObj = {};
     sendSubscribedObj.deviceUid = tag.deviceUid;
     sendSubscribedObj.values = {};
@@ -753,11 +756,18 @@ class CustomDriver{
     }
   }
 
+  isIterable(obj) {
+    if (obj == null) {
+      return false;
+    }
+    return typeof obj[Symbol.iterator] === 'function';
+  }
+
   // split value from tags array
   getValueByIndex (tag, value) {
     if(value === undefined) return null;
     if(tag.arrayIndex === -1) return this.getValueByType(tag, value)
-    const values = [...value]
+    const values = this.isIterable(value) ? [...value] : [value]
     return tag.arrayIndex < values.length ? this.getValueByType(tag, values[tag.arrayIndex]) : null;
   }
 
