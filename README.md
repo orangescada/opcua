@@ -7,8 +7,8 @@
 Для установки использовать команды
 
 ```sh
-git clone https://github.com/maxmaxk/orangescada-opcua
-cd orangescada-opcua
+git clone https://github.com/orangescada/opcua.git
+cd opcua
 npm i
 npm start
 ```
