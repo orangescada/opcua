@@ -47,8 +47,9 @@ class CustomDriver{
     this.deviceList = deviceList;
     this.connections = {};
     this.subscribeHandler = subscribeHandler;
-    this.logger = logger
-    this.browserFlag = false
+    this.logger = logger;
+    this.browserFlag = false;
+    this.browserCount = 0;
     this.updateSubscribe();
   }
 
@@ -148,38 +149,42 @@ class CustomDriver{
    * @param {object} dataObj - object contains device for tags update
    * @returns {boolean} true if config has updated, otherwise false
    */
-  updateTagListFromDevice(dataObj){
+  updateTagListFromDevice(dataObj, setConfigHandler){
     return new Promise(resolve => {
       const fullDeviceName = this.getFullDeviceAddress(dataObj.deviceUid);
       if(this.deviceList.list[dataObj.deviceUid]?.options.browseTrigger?.currentValue !== "Start") {
-        resolve(false);
+        resolve();
         return;
       }
       if(!fullDeviceName) {
-        resolve(false);
+        resolve();
         return;
       }
 
-      if (this.browserFlag) throw Error()
-
-      const session = this.connections[fullDeviceName]?.session;
-      const createConnectPromise = session ? Promise.resolve() : this.createConnect([], dataObj.deviceUid)
-
-      createConnectPromise
-      .then( _ => {
+      if (!this.browserFlag) {
+        this.browserCount = 0;
         this.browserFlag = true
         const session = this.connections[fullDeviceName]?.session;
-        return this.browseTagsIter(session)
-      })
-      .then(browseTags => this.populateDevice(dataObj, browseTags))
-      .then( _ => {
-        this.browserFlag = false
-        resolve(true)
-      })
-      .catch( _ => {
-        this.browserFlag = false
-        resolve(false)
-      })
+        const createConnectPromise = session ? Promise.resolve() : this.createConnect([], dataObj.deviceUid)
+  
+        createConnectPromise
+        .then( _ => {
+          const session = this.connections[fullDeviceName]?.session;
+          return this.browseTagsIter(session)
+        })
+        .then(browseTags => this.populateDevice(dataObj, browseTags))
+        .then( _ => {
+          this.browserFlag = false
+          setConfigHandler()
+          resolve()
+        })
+        .catch( _ => {
+          this.browserFlag = false
+          resolve()
+        })
+      }
+
+      if (this.browserFlag) throw Error(`Tag browsing in progress: ${this.browserCount}`);
     })
   }
 
@@ -295,6 +300,7 @@ class CustomDriver{
                 const isArray = data?.value?.arrayType === 1;
                 const arraySize = data?.value?.value ? data?.value?.value.toString().split(',').length : 1;
                 const tagsCount = isArray ? arraySize : 1;
+                this.browserCount++;
                 for (let i = 0; i < tagsCount; i++) {
                   browseTags.push({
                     "name": `${slashFolder}${ref.displayName.text}/_value${isArray ? `[${i}]` : ''}`,

@@ -115,7 +115,7 @@
       "active": true,
       "options": {
         "endpointUrl": {
-          "currentValue": "opc.tcp://DESKTOP-TMRFNLR:53530/OPCUA/SimulationServer"
+          "currentValue": "opc.tcp://localhost:53530/OPCUA/SimulationServer"
         },
         "browseTrigger": {
           "currentValue": "Stop"
