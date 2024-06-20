@@ -48,6 +48,7 @@ class CustomDriver{
     this.connections = {};
     this.subscribeHandler = subscribeHandler;
     this.logger = logger
+    this.browserFlag = false
     this.updateSubscribe();
   }
 
@@ -159,19 +160,26 @@ class CustomDriver{
         return;
       }
 
+      if (this.browserFlag) throw Error()
+
       const session = this.connections[fullDeviceName]?.session;
       const createConnectPromise = session ? Promise.resolve() : this.createConnect([], dataObj.deviceUid)
 
       createConnectPromise
       .then( _ => {
+        this.browserFlag = true
         const session = this.connections[fullDeviceName]?.session;
         return this.browseTagsIter(session)
       })
       .then(browseTags => this.populateDevice(dataObj, browseTags))
-      .then( _ => resolve(true))
-      .catch( _ => 
+      .then( _ => {
+        this.browserFlag = false
+        resolve(true)
+      })
+      .catch( _ => {
+        this.browserFlag = false
         resolve(false)
-      )
+      })
     })
   }
 
@@ -218,10 +226,12 @@ class CustomDriver{
           if(tagId > maxTagId) maxTagId = tagId;
         })
         browseTags.forEach(browseTag => {
-          let tagUid = tagmap.find(tag => tag[1] === browseTag.name);
-          if(tagUid){
-            tagUid = tagUid[0]
-          }
+          const idx = tagmap.findIndex(tag => tag[1] === browseTag.name);
+          let tagUid = idx >= 0 ? tagmap[idx][0] : ''
+          // tagmap.find(tag => tag[1] === browseTag.name);
+          // if(tagUid){
+          //   tagUid = tagUid[0]
+          // }
           if(!tagUid){
             tagUid = ++maxTagId;
             device.tags[tagUid] = {};
@@ -238,9 +248,13 @@ class CustomDriver{
           device.tags[tagUid].options.nodeId.currentValue = browseTag.nodeId;
           device.tags[tagUid].options.arrayIndex.currentValue = browseTag.arrayIndex;
           device.tags[tagUid].type = this.getTagType(browseTag.type);
+          if (idx >= 0) tagmap[idx][0] = ''
         })
       }
       device.options.browseTrigger.currentValue = "Stop";
+      tagmap.forEach(tag => {
+        if (tag[0] !== '') delete device.tags[tag[0]];
+      })
     }
   }
 

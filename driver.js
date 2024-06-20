@@ -90,6 +90,7 @@ const errOptionNameAbsentTxt		= 'Option name absent';
 const errSelectValuesAbsentTxt		= 'Select values absent';
 const errUidListTxt					= 'ID list read fail';
 const errItemNotEditable			= 'Item is not editable';
+const errBrowserProgressTxt         = 'Tag browsing in progress'
 
 /**
  * Common class for list of nodes, devices or tags
@@ -902,6 +903,9 @@ function getTags(dataObj){
 			setConfig(config);
 		}
 		commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+	})
+	.catch(() => {
+		errHandler(errBrowserProgressTxt, dataObj);
 	})
 }
 
