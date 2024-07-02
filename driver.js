@@ -669,8 +669,13 @@ function handShake(){
  * parseRequest - 
  * @param {object} data - parsing requests, get and execute handler
  */
+let requestBuffer = ''
 function parseRequest(data){
-	let dataStr = data.toString().split('\n');
+	if (!data.toString().includes('\n')) {
+		requestBuffer += data.toString()
+	}
+	let dataStr = requestBuffer.concat(data.toString()).split('\n');
+	requestBuffer = '';
 	for(let item of dataStr){
 		if(!item) continue;
 		logger(serverRequestTxt+' '+item);

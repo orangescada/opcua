@@ -140,7 +140,12 @@ class CustomDriver{
     const fullDeviceName = this.getFullDeviceAddress(deviceId);
     if(fullDeviceName){
       const client = this.connections[fullDeviceName]?.client;
-      if(client) this.destroyConnect(client, restartOnChangeTxt);
+      try {
+        if(client) this.destroyConnect(client, restartOnChangeTxt);
+      }
+      catch (err) {
+        this.logger(err)
+      }
     }
   }
 
@@ -280,6 +285,10 @@ class CustomDriver{
       let chain = Promise.resolve();
       chain = chain.then( _ => {
         return new Promise(resolve => {
+          if (!session) {
+            resolve(null);
+            return;
+          }
           session.browse(nodeToBrowse)
           .then(browseResult => resolve(browseResult))
           .catch(err => {
@@ -310,8 +319,9 @@ class CustomDriver{
                   });
                 }
               })
+              .catch(err => this.logger)
             }
-              chain = chain.then( _ => this.browseTagsIter(session, ref.nodeId, `${slashFolder}${ref.displayName.text}`, browseTags))
+            chain = chain.then( _ => this.browseTagsIter(session, ref.nodeId, `${slashFolder}${ref.displayName.text}`, browseTags))
           })
         }
         chain = chain.then( _ => resolve(browseTags));
@@ -337,7 +347,7 @@ class CustomDriver{
       })
       if(tags.length > 0){
         this.opcuaReadRequest(tags, item)
-        .catch(err => logger(err))
+        .catch(err => this.logger(err))
       }
     }
   }
