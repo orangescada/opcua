@@ -671,7 +671,7 @@ function handShake(){
  */
 let requestBuffer = ''
 function parseRequest(data){
-	if (!data.toString().includes('\n')) {
+	if (!data.toString().endsWith('\n')) {
 		requestBuffer += data.toString()
 	}
 	let dataStr = requestBuffer.concat(data.toString()).split('\n');

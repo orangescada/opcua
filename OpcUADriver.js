@@ -35,6 +35,7 @@ const restartOnChangeTxt        = 'Restart on change params';
 
 const defaultTimeout            = 10000;
 const dateTimeFormat            = 'DD.MM.YYYY HH:mm:ss';
+const maxStringSize             = 256;
 
 // class implements OPCUA driver
 class CustomDriver{
@@ -238,10 +239,6 @@ class CustomDriver{
         browseTags.forEach(browseTag => {
           const idx = tagmap.findIndex(tag => tag[1] === browseTag.name);
           let tagUid = idx >= 0 ? tagmap[idx][0] : ''
-          // tagmap.find(tag => tag[1] === browseTag.name);
-          // if(tagUid){
-          //   tagUid = tagUid[0]
-          // }
           if(!tagUid){
             tagUid = ++maxTagId;
             device.tags[tagUid] = {};
@@ -722,7 +719,7 @@ class CustomDriver{
   // correction value for 64bit tags
   correct64 (tag, value) {
     if(tag.nodeType !== DataType.Int64 && tag.nodeType !== DataType.UInt64) {
-      return value.toString();
+      return isNaN(parseFloat(value)) ? value.toString() : value;
     }
     if (tag.nodeType == DataType.Int64) {
       return this.int64HiLoToString(value[0], value[1])
@@ -780,6 +777,8 @@ class CustomDriver{
           return moment(new Date(value)).unix() * 1000;
         case 'bool':
           return value ? 1 : 0
+        case 'string':
+          return value.toString().slice(0, maxStringSize)
         default:
           return this.correct64(tag, value)
       }
