@@ -673,6 +673,7 @@ let requestBuffer = ''
 function parseRequest(data){
 	if (!data.toString().endsWith('\n')) {
 		requestBuffer += data.toString()
+		return
 	}
 	let dataStr = requestBuffer.concat(data.toString()).split('\n');
 	requestBuffer = '';
