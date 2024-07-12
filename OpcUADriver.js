@@ -253,6 +253,7 @@ class CustomDriver{
             device.tags[tagUid].write = true;
           }
           device.tags[tagUid].options.nodeId.currentValue = browseTag.nodeId;
+          device.tags[tagUid].options.nodeType.currentValue = browseTag.type;
           device.tags[tagUid].options.arrayIndex.currentValue = browseTag.arrayIndex;
           device.tags[tagUid].type = this.getTagType(browseTag.type);
           if (idx >= 0) tagmap[idx][0] = ''
