@@ -16,6 +16,6 @@
   "license": "ISC",
   "dependencies": {
     "moment": "^2.29.4",
-    "node-opcua": "2.103.0"
+    "node-opcua-client": "^2.133.0"
   }
 }

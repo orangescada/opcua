@@ -559,6 +559,7 @@ const tls = require('tls');
 const process = require('process');
 let server={};
 server.connected = false;
+server.connecting = false;
 server.dataEventFlag = false;
 server.currentTransID = 0;
 
@@ -575,9 +576,9 @@ const maxTransID = 65535;
  * tryConnectServer - connect trying function, data|close|error events handlers
  */
 function tryConnectServer(){
-  if(!server.connected){
+  if(!server.connected && !server.connecting){
     logger(tryConnectTxt);
-    server.connected = true;
+    server.connecting = true;
     if(ssl){
       let options={
         host: orangeScadaHost,
@@ -585,12 +586,16 @@ function tryConnectServer(){
         rejectUnauthorized: false,
       };
       server.socket = tls.connect(options, () =>{
+		server.connecting = false;
+		server.connected = true;
         logger(serverConnectedTxt);
         handShake();
       });
     }else{
       server.socket = new net.Socket();
       server.socket.connect(orangeScadaPort, orangeScadaHost, () => {
+		server.connecting = false;
+		server.connected = true;
         logger(serverConnectedTxt);
         handShake();
       });
@@ -602,11 +607,13 @@ function tryConnectServer(){
     server.socket.on('close',(code, reason) => {
       logger(errServerConnectClosedTxt);
       server.connected=false;
+	  server.connecting = false;
       server.socket.destroy();
     });
     server.socket.on('error',(e) => {
       logger(errServerConnectTxt+' '+e);
       server.connected=false;
+	  server.connecting = false;
       server.socket.destroy();
     });
   };
@@ -618,6 +625,7 @@ function tryConnectServer(){
 function serverNodataReconnect(){
 	if (server.connected && !server.dataEventFlag){
 		server.connected=false;
+		server.connecting=false;
 		server.socket.destroy();		
 	}
 	server.dataEventFlag = false;

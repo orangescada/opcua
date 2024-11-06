@@ -14,7 +14,7 @@ const {
   DataType,
   UserTokenType,
   NodeClass
-} = require("node-opcua");
+} = require("node-opcua-client");
 const moment = require("moment/moment");
 
 // Error text constants
@@ -35,7 +35,7 @@ const restartOnChangeTxt        = 'Restart on change params';
 
 const defaultTimeout            = 10000;
 const dateTimeFormat            = 'DD.MM.YYYY HH:mm:ss';
-const maxStringSize             = 256;
+const maxStringSize             = 16;
 
 // class implements OPCUA driver
 class CustomDriver{
@@ -648,6 +648,10 @@ class CustomDriver{
         subscription.on("terminated", () => {
           this.destroyConnect(client, errSubscriptionTxt, reject);
         })
+        subscription.on("error", err => {
+          this.logger('Subscription error: ' + err)
+          this.destroyConnect(client, errSubscriptionTxt, reject);
+        })
         client.connected = true;
         resolve(client);
         this.connections[fullDeviceName].subscription = subscription;
@@ -687,6 +691,8 @@ class CustomDriver{
       TimestampsToReturn.Both)
       .then(monitoredItem => {
         monitoredItem.on("changed", dataValue => this.response(dataValue, tag));
+        monitoredItem.on("terminated", () => this.logger('MonitoredItem terminated'));
+        monitoredItem.on("err", err => this.logger('MonitoredItem error: ' + err));
       })
     })
   }
@@ -703,7 +709,7 @@ class CustomDriver{
     sendSubscribedObj.deviceUid = tag.deviceUid;
     sendSubscribedObj.values = {};
 
-    if (this.connections[tag.endpointUrl]) {
+    if (this.connections[tag.endpointUrl] && this.connections[tag.endpointUrl].ns[tag.nodeId]) {
       this.connections[tag.endpointUrl].ns[tag.nodeId].tags.forEach(tag => {
         this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue = value;
         this.connections[tag.endpointUrl].tags[tag.name].value = this.getValueByIndex(tag, value);
