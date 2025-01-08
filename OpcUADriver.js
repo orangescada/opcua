@@ -525,6 +525,10 @@ class CustomDriver{
   opcuaRequest(tags, handler, deviceUid) {
     return new Promise((resolve,reject) => {
       try{
+        if (tags.length === 0){
+          resolve([]);
+          return;
+        }
         let fullDeviceName = this.getFullDeviceAddress(tags);
         if (!this.connections[fullDeviceName]){
           this.createConnect(tags, deviceUid)

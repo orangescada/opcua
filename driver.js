@@ -91,6 +91,12 @@ const errSelectValuesAbsentTxt		= 'Select values absent';
 const errUidListTxt					= 'ID list read fail';
 const errItemNotEditable			= 'Item is not editable';
 
+// Buffer accumulator timer for async response
+
+let accumBuffer = {};
+let accumTimer = undefined;
+const accumTime = 100;
+
 /**
  * Common class for list of nodes, devices or tags
  */
@@ -1007,9 +1013,28 @@ function setTagsSubscribe(dataObj){
  * @param {object} dataObj - request object
  */
 function subscribeHandler(dataObj){
-	dataObj.cmd = 'asyncTagsValues';
-	dataObj.transID = getSubscribTransID();
-	sendToSocket(dataObj);
+	const values = Object.entries(dataObj.values);
+	if (values.length === 1){
+		const tagname = values[0][0]
+		const value = values[0][1]
+    	if (!accumBuffer[dataObj.deviceUid]) {
+    		accumBuffer[dataObj.deviceUid] = {}
+    	}
+    	
+    	accumBuffer[dataObj.deviceUid][tagname] = value
+        if (!accumTimer) {
+    		accumTimer = setTimeout(() => {
+    	        dataObj.cmd = 'asyncTagsValues';
+    	        dataObj.transID = getSubscribTransID();
+				Object.entries(accumBuffer).forEach(([dev, values]) => {
+					dataObj.deviceUid = dev;
+					dataObj.values = values;
+    	            sendToSocket(dataObj);
+				});
+    			accumTimer = undefined;
+    		}, accumTime)
+    	}
+    }
 }
 
 /**
