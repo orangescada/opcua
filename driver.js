@@ -61,7 +61,13 @@ function getConfig(){
  * @param {object} config - config object
  */
 function setConfig(config) {
-	let configJSON = JSON.stringify(config, null, 2);
+	const configDeepCopy = JSON.parse(JSON.stringify(config))
+	Object.values(configDeepCopy.devices).forEach(device => {
+	  Object.values(device.tags).forEach(tag => {
+		delete tag.subscribed
+	  })
+	})
+	let configJSON = JSON.stringify(configDeepCopy, null, 2);
 	const root = path.dirname(require.main.filename);
 	try{
 		fs.writeFileSync(root+'/driverConfig.json', configJSON, {encoding: "utf8"});
@@ -523,7 +529,7 @@ class ObjList {
 			this.list[item].subscribed = dataObj.tags.includes(item);
 		}
 		let answer = {cmd:dataObj.cmd, transID: dataObj.transID};
-		return {answer:answer, error:"", setConfig: true};
+		return {answer:answer, error:""};
 	}
 
 }

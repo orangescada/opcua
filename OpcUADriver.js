@@ -51,24 +51,25 @@ class CustomDriver{
     this.logger = logger;
     this.browserFlag = false;
     this.browserCount = 0;
-    this.updateSubscribe();
+    // this.updateSubscribe();
   }
 
   // returns device status {active: true | false}
   getDeviceStatus(dataObj){
     let device = this.deviceList.list ? this.deviceList.list[dataObj.uid] : null;
     if(!device) return {active: false};
-    dataObj.deviceUid = dataObj.uid;
+    const deviceUid = dataObj.uid
+    dataObj.deviceUid = deviceUid;
     let firstTag = device.tags ? Object.keys(device.tags)[0] : undefined;
     dataObj.tags = firstTag ? [firstTag] : [];
     let fullDeviceName = this.getFullDeviceAddress(dataObj.uid);
-    if(!this.connections[fullDeviceName]){
+    if(!this.connections[fullDeviceName] || !this.connections[fullDeviceName][deviceUid]){
       this.getTagsList('read', dataObj)
       .then(tags => this.createConnect(tags, dataObj.uid))
       .catch( _ => {});
       return {active: false};
     }
-    return {active: this.connections[fullDeviceName].client.connected};
+    return {active: this.connections[fullDeviceName][deviceUid].client.connected};
   }
 
   /**
@@ -123,7 +124,7 @@ class CustomDriver{
       let res = {};
       res.answer = {cmd:dataObj.cmd, transID: dataObj.transID};
       this.getTagsList('write', dataObj)
-      .then(tags => this.opcuaWriteRequest(tags))
+      .then(tags => this.opcuaWriteRequest(tags, dataObj.deviceUid))
       .then( _ => {
         res.error = "";
         resolve(res);
@@ -140,9 +141,9 @@ class CustomDriver{
     const deviceId = dataObj.cmd === 'setTag' ? dataObj.deviceUid : dataObj.uid;
     const fullDeviceName = this.getFullDeviceAddress(deviceId);
     if(fullDeviceName){
-      const client = this.connections[fullDeviceName]?.client;
+      const client = this.connections[fullDeviceName] ? this.connections[fullDeviceName][deviceId]?.client : undefined;
       try {
-        if(client) this.destroyConnect(client, restartOnChangeTxt);
+        if(client) this.destroyConnect(client, restartOnChangeTxt, () => {}, deviceId);
       }
       catch (err) {
         this.logger(err)
@@ -167,16 +168,15 @@ class CustomDriver{
         return;
       }
 
+      const session = this.connections[fullDeviceName] ? this.connections[fullDeviceName][dataObj.deviceUid]?.session : undefined;
       if (!this.browserFlag) {
         this.browserCount = 0;
         this.browserFlag = true
-        const session = this.connections[fullDeviceName]?.session;
         const createConnectPromise = session ? Promise.resolve() : this.createConnect([], dataObj.deviceUid)
   
         createConnectPromise
         .then( _ => {
-          const session = this.connections[fullDeviceName]?.session;
-          return this.browseTagsIter(session)
+          return this.browseTagsIter(this.connections[fullDeviceName][dataObj.deviceUid]?.session)
         })
         .then(browseTags => this.populateDevice(dataObj, browseTags))
         .then( _ => {
@@ -339,8 +339,8 @@ class CustomDriver{
       const fullDeviceName = this.deviceList.list[item].options.endpointUrl.currentValue;
       const tagNames = tags.map(tag => tag.name);
       dataObj.tags.forEach(tag => {
-        if(this.connections[fullDeviceName]?.tags[tag]){
-          this.connections[fullDeviceName].tags[tag].subscribed = tagNames.includes(tag)
+        if(this.connections[fullDeviceName] && this.connections[fullDeviceName][item]?.tags[tag]){
+          this.connections[fullDeviceName][item].tags[tag].subscribed = tagNames.includes(tag)
         }
       })
       if(tags.length > 0){
@@ -417,20 +417,20 @@ class CustomDriver{
   }
 
   // returns array with current tags values
-  opcuaGetValues(tags, fullDeviceName) {
+  opcuaGetValues(tags, fullDeviceName, deviceUid) {
     const getValue = (tag) => {
       if(!tag) return null
       return tag.value ?? (tag.err ? {"errorTxt": tag.err} : null)
     }
     return new Promise(resolve => resolve(tags.reduce((acc, tag) => {
-      return [...acc, getValue(this.connections[fullDeviceName]?.tags[tag.name])]
+      return [...acc, getValue(this.connections[fullDeviceName] ? this.connections[fullDeviceName][deviceUid]?.tags[tag.name] : undefined)]
     }, [])))
   }
 
   // returns value or array (depends on set tag is a part of array or not) with set values
-  getSetValue(tag) {
+  getSetValue(tag, deviceId) {
     if(tag.arrayIndex < 0) return this.getOneSetValue(tag);
-    const originalValue = this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue;
+    const originalValue = this.connections[tag.endpointUrl][deviceId].ns[tag.nodeId].originalValue;
     const valArray = [...originalValue]
     valArray[tag.arrayIndex] = this.getOneSetValue(tag);
     return valArray;
@@ -446,9 +446,9 @@ class CustomDriver{
   }
 
   // write set tags to opc
-  opcuaSetValues(tags, fullDeviceName) {
+  opcuaSetValues(tags, fullDeviceName, deviceId) {
     return new Promise((resolve, reject) => {
-      const session = this.connections[fullDeviceName]?.session;
+      const session = this.connections[fullDeviceName] ? this.connections[fullDeviceName][deviceId]?.session : undefined;
       if(!session){
         reject(errEmptySession);
         return;
@@ -458,7 +458,7 @@ class CustomDriver{
           if(tag.err){
             reject(tag.err)
           }else{
-            const newValue = this.getSetValue(tag)
+            const newValue = this.getSetValue(tag, deviceId)
             session.write({
               nodeId: tag.nodeId,
               attributeId: AttributeIds.Value,
@@ -502,13 +502,13 @@ class CustomDriver{
   }
 
   // checks unmonitored tags, add whem to subscribe
-  checkIfTagsInMonitor(tags, fullDeviceName) {
+  checkIfTagsInMonitor(tags, fullDeviceName, deviceUid) {
     const noMonitoredTags = tags.filter(
-      tag => !this.connections[fullDeviceName]?.tags[tag.name]
+      tag => !this.connections[fullDeviceName] || !this.connections[fullDeviceName][deviceUid].tags[tag.name]
     );
     if(noMonitoredTags.length > 0) {
-      const subscription = this.connections[fullDeviceName]?.subscription;
-      this.addMonitoredTags(subscription, noMonitoredTags, fullDeviceName);
+      const subscription = this.connections[fullDeviceName] ? this.connections[fullDeviceName][deviceUid].subscription : undefined;
+      this.addMonitoredTags(subscription, noMonitoredTags, fullDeviceName, deviceUid);
     }
   }
 
@@ -517,8 +517,8 @@ class CustomDriver{
    * @param {object} tags - tags objects array with options for requests
    * @returns {Promise} undefined on success, text error on fail
    */
-  opcuaWriteRequest(tags){
-    return this.opcuaRequest(tags, this.opcuaSetValues)
+  opcuaWriteRequest(tags, deviceId){
+    return this.opcuaRequest(tags, this.opcuaSetValues, deviceId)
   }
 
   // common method for read/write tags values
@@ -529,15 +529,15 @@ class CustomDriver{
           resolve([]);
           return;
         }
-        let fullDeviceName = this.getFullDeviceAddress(tags);
-        if (!this.connections[fullDeviceName]){
+        let fullDeviceName = this.getFullDeviceAddress(deviceUid);
+        if (!this.connections[fullDeviceName] || !this.connections[fullDeviceName][deviceUid]){
           this.createConnect(tags, deviceUid)
-          .then(() => handler.call(this, tags, fullDeviceName))
+          .then(() => handler.call(this, tags, fullDeviceName, deviceUid))
           .then(res => resolve(res))
           .catch(err => reject(err))
         }else{
-          this.checkIfTagsInMonitor(tags, fullDeviceName);
-          handler.call(this, tags, fullDeviceName)
+          this.checkIfTagsInMonitor(tags, fullDeviceName, deviceUid);
+          handler.call(this, tags, fullDeviceName, deviceUid)
           .then(res => resolve(res))
           .catch(err => {
             reject(err)
@@ -550,24 +550,24 @@ class CustomDriver{
   }
 
   // method for close session
-  closeSession(fullDeviceAddress) {
+  closeSession(fullDeviceAddress, deviceUid) {
     return new Promise(resolve => {
-      if(!this.connections[fullDeviceAddress]?.session){
+      if(!this.connections[fullDeviceAddress] || !this.connections[fullDeviceAddress][deviceUid]?.session){
         resolve()
       }else{
-        this.connections[fullDeviceAddress].session.close()
+        this.connections[fullDeviceAddress][deviceUid].session.close()
         .then(() => resolve())
       }
     })
   }
 
   // method for destroy connect with opc
-  destroyConnect(client, errTxt, reject) {
-    this.closeSession(client.fullDeviceAddress)
+  destroyConnect(client, errTxt, reject, deviceUid) {
+    this.closeSession(client.fullDeviceAddress, deviceUid)
     .then(() => client.disconnect())
     .finally(() => {
-      this.connections[client.fullDeviceAddress] = null;
-      delete this.connections[client.fullDeviceAddress];
+      delete this.connections[client.fullDeviceAddress][deviceUid];
+      this.connections[client.fullDeviceAddress][deviceUid] = null;
       client.connected = false;
       let errText = `${errTxt} ${client.fullDeviceAddress}`;
       if(reject) reject(errText);
@@ -624,10 +624,13 @@ class CustomDriver{
       });
 
       const fullDeviceName = this.getFullDeviceAddress(deviceUid);
-      this.connections[fullDeviceName] = {};
-      this.connections[fullDeviceName].client = client;
-      this.connections[fullDeviceName].tags = {};
-      this.connections[fullDeviceName].ns = {};
+      if (!this.connections[fullDeviceName]) {
+        this.connections[fullDeviceName] = {};
+      }
+      this.connections[fullDeviceName][deviceUid] = {}
+      this.connections[fullDeviceName][deviceUid].client = client;
+      this.connections[fullDeviceName][deviceUid].tags = {};
+      this.connections[fullDeviceName][deviceUid].ns = {};
       const userIdentityInfo = 
         this.getAnonymous(deviceUid)
         ? {type: UserTokenType.Anonymous}
@@ -639,7 +642,7 @@ class CustomDriver{
       client.connect(fullDeviceName)
       .then( _ => client.createSession(userIdentityInfo))
       .then(session => {
-        this.connections[fullDeviceName].session = session;
+        this.connections[fullDeviceName][deviceUid].session = session;
         return session.createSubscription2({
           requestedPublishingInterval: 1000,
           requestedLifetimeCount: 100, // 1000ms *100 every 2 minutes or so
@@ -650,54 +653,58 @@ class CustomDriver{
       })})
       .then(subscription => {
         subscription.on("terminated", () => {
-          this.destroyConnect(client, errSubscriptionTxt, reject);
+          this.destroyConnect(client, errSubscriptionTxt, reject, deviceUid);
         })
         subscription.on("error", err => {
           this.logger('Subscription error: ' + err)
-          this.destroyConnect(client, errSubscriptionTxt, reject);
+          this.destroyConnect(client, errSubscriptionTxt, reject, deviceUid);
         })
         client.connected = true;
         resolve(client);
-        this.connections[fullDeviceName].subscription = subscription;
+        this.connections[fullDeviceName][deviceUid].subscription = subscription;
         this.addMonitoredTags(subscription, tags, fullDeviceName);
       })
       .catch(err => {
-        this.destroyConnect(client, `${errOpcReject}:${err}`, reject);
+        this.destroyConnect(client, `${errOpcReject}:${err}`, reject, deviceUid);
       })
       client.on("backoff", _ => {
-        this.destroyConnect(client, errHostCloseConnectTxt, reject);
+        this.destroyConnect(client, errHostCloseConnectTxt, reject, deviceUid);
       });
     });a
   }
 
   // add subscibe for monitored tags
-  addMonitoredTags (subscription, tags, fullDeviceName) {
+  addMonitoredTags (subscription, tags, fullDeviceName, deviceUid) {
     if(!subscription) return;
+    const deviceObj = this.connections[fullDeviceName] ? this.connections[fullDeviceName][deviceUid] : undefined;
+    if (!deviceObj) return;
     tags.forEach(tag => {
-      if (this.connections[fullDeviceName].ns[tag.nodeId]){
-        this.connections[fullDeviceName].tags[tag.name] = tag;
-        tag.value = this.getValueByIndex(tag, this.connections[fullDeviceName].ns[tag.nodeId].originalValue);
-        this.connections[fullDeviceName].ns[tag.nodeId].tags.push(tag)
-        return;
+      if (!tag.err){
+        if (deviceObj.ns[tag.nodeId]){
+          deviceObj.tags[tag.name] = tag;
+          tag.value = this.getValueByIndex(tag, deviceObj.ns[tag.nodeId].originalValue);
+          deviceObj.ns[tag.nodeId].tags.push(tag)
+          return;
+        }
+        deviceObj.tags[tag.name] = tag;
+        deviceObj.ns[tag.nodeId] = {};
+        deviceObj.ns[tag.nodeId].tags = [tag]
+        subscription.monitor({
+          nodeId: tag.nodeId,
+          attributeId: AttributeIds.Value
+        },
+        {
+          samplingInterval: 1000,
+          discardOldest: true,
+          queueSize: 10
+        }, 
+        TimestampsToReturn.Both)
+        .then(monitoredItem => {
+          monitoredItem.on("changed", dataValue => this.response(dataValue, tag));
+          monitoredItem.on("terminated", () => this.logger('MonitoredItem terminated'));
+          monitoredItem.on("err", err => this.logger('MonitoredItem error: ' + err));
+        })
       }
-      this.connections[fullDeviceName].tags[tag.name] = tag;
-      this.connections[fullDeviceName].ns[tag.nodeId] = {};
-      this.connections[fullDeviceName].ns[tag.nodeId].tags = [tag]
-      subscription.monitor({
-        nodeId: tag.nodeId,
-        attributeId: AttributeIds.Value
-      },
-      {
-        samplingInterval: 1000,
-        discardOldest: true,
-        queueSize: 10
-      }, 
-      TimestampsToReturn.Both)
-      .then(monitoredItem => {
-        monitoredItem.on("changed", dataValue => this.response(dataValue, tag));
-        monitoredItem.on("terminated", () => this.logger('MonitoredItem terminated'));
-        monitoredItem.on("err", err => this.logger('MonitoredItem error: ' + err));
-      })
     })
   }
 
@@ -713,16 +720,15 @@ class CustomDriver{
     sendSubscribedObj.deviceUid = tag.deviceUid;
     sendSubscribedObj.values = {};
 
-    if (this.connections[tag.endpointUrl] && this.connections[tag.endpointUrl].ns[tag.nodeId]) {
-      this.connections[tag.endpointUrl].ns[tag.nodeId].tags.forEach(tag => {
-        this.connections[tag.endpointUrl].ns[tag.nodeId].originalValue = value;
-        this.connections[tag.endpointUrl].tags[tag.name].value = this.getValueByIndex(tag, value);
+    if (this.connections[tag.endpointUrl] && this.connections[tag.endpointUrl][tag.deviceUid] && this.connections[tag.endpointUrl][tag.deviceUid].ns[tag.nodeId]) {
+      this.connections[tag.endpointUrl][tag.deviceUid].ns[tag.nodeId].tags.forEach(tag => {
+        this.connections[tag.endpointUrl][tag.deviceUid].ns[tag.nodeId].originalValue = value;
+        this.connections[tag.endpointUrl][tag.deviceUid].tags[tag.name].value = this.getValueByIndex(tag, value);
         if(tag.subscribed){
           sendSubscribedObj.values[tag.name] = this.getValueByIndex(tag, value);
         }
       })
     }
-    
     if(Object.keys(sendSubscribedObj.values).length > 0) this.subscribeHandler(sendSubscribedObj);
 
   }
