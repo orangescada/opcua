@@ -65,7 +65,7 @@ function setConfig(config) {
 	Object.values(configDeepCopy.devices).forEach(device => {
 	  if (device?.tags) {
 	    Object.values(device.tags).forEach(tag => {
-	  	delete tag.subscribed
+	  	  delete tag.subscribed
 	    })
 	  }
 	})
@@ -1017,7 +1017,6 @@ function setTagsSubscribe(dataObj){
 
 // handler invoke from customDriver on data change
 /**
- * HERE
  * @param {object} dataObj - request object
  */
 function subscribeHandler(dataObj){
@@ -1040,6 +1039,7 @@ function subscribeHandler(dataObj){
     	            sendToSocket(dataObj);
 				});
     			accumTimer = undefined;
+				accumBuffer = {}
     		}, accumTime)
     	}
     }
