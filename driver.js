@@ -63,9 +63,11 @@ function getConfig(){
 function setConfig(config) {
 	const configDeepCopy = JSON.parse(JSON.stringify(config))
 	Object.values(configDeepCopy.devices).forEach(device => {
-	  Object.values(device.tags).forEach(tag => {
-		delete tag.subscribed
-	  })
+	  if (device?.tags) {
+	    Object.values(device.tags).forEach(tag => {
+	  	delete tag.subscribed
+	    })
+	  }
 	})
 	let configJSON = JSON.stringify(configDeepCopy, null, 2);
 	const root = path.dirname(require.main.filename);
