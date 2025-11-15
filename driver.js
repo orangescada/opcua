@@ -46,10 +46,18 @@ path = require('path');
  */
 function getConfig(){
 	const root = path.dirname(require.main.filename);
-	const configJSON = fs.readFileSync(root+'/driverConfig.json', 'utf-8');
+	let configJSON = {}
+	let configRestore = false
+	if (!fs.existsSync(root+'/driverConfig.json')) {
+      configJSON = fs.readFileSync(root+'/driverConfig.default', 'utf-8');
+	  configRestore = true
+	} else {
+	  configJSON = fs.readFileSync(root+'/driverConfig.json', 'utf-8');
+	}
 	let config = null;
 	try{
 		config = JSON.parse(configJSON);
+		if (configRestore) setConfig(config)
 	}catch(e){
 		logger('Error JSON parse config file: ' + e);
 	}
