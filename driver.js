@@ -945,6 +945,15 @@ function setConfigHandler () {
 	setConfig(config);
 }
 
+function progressMessage(dataObj) {
+	return { 
+		error:"", 
+		answer: {
+			cmd:dataObj.cmd, transID: dataObj.transID, progressTxt: dataObj.progressTxt
+		}
+	}
+}
+
 /**
  * getTags command handler
  * @param {object} dataObj - request object
