@@ -8,7 +8,7 @@
 // Full description of all API functions you can get from cite
 // https://www.orangescada.ru/docs/
 //
-// Version 1.0
+// Version 1.1
 // Author: OrangeScada company
 //
 //**************************************************************************
@@ -542,6 +542,20 @@ class ObjList {
 		return {answer:answer, error:""};
 	}
 
+	/**
+	 * progressMessage - method returns answer with tags scan progress
+	 * @param {object} dataObj - request object
+	 * @returns {object}
+	 */
+	static progressMessage(dataObj) {
+	return { 
+		error:"", 
+		answer: {
+			cmd: dataObj.cmd, transID: dataObj.transID, progressTxt: dataObj.progressTxt
+		}
+	}
+}
+
 }
 
 
@@ -937,8 +951,13 @@ function setConfigHandler () {
  */
 function getTags(dataObj){
 	customDriver.updateTagListFromDevice(dataObj, setConfigHandler)
-	.then(() => {
-		commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+	.then(res => {
+		if (res?.progressTxt) {
+			dataObj.progressTxt = res.progressTxt
+			commonHandler(dataObj, ObjList.progressMessage);
+		} else {
+		    commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+		}
 	})
 	.catch(err => {
 		errHandler(err.message, dataObj);
