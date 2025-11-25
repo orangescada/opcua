@@ -8,7 +8,7 @@
 // Full description of all API functions you can get from cite
 // https://www.orangescada.ru/docs/
 //
-// Version 1.0
+// Version 1.1
 // Author: OrangeScada company
 //
 //**************************************************************************
@@ -931,14 +931,28 @@ function setConfigHandler () {
 	setConfig(config);
 }
 
+function progressMessage(dataObj) {
+	return { 
+		error:"", 
+		answer: {
+			cmd:dataObj.cmd, transID: dataObj.transID, progressTxt: dataObj.progressTxt
+		}
+	}
+}
+
 /**
  * getTags command handler
  * @param {object} dataObj - request object
  */
 function getTags(dataObj){
 	customDriver.updateTagListFromDevice(dataObj, setConfigHandler)
-	.then(() => {
-		commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+	.then(res => {
+		if (res?.progressTxt) {
+			dataObj.progressTxt = res.progressTxt
+			commonHandler(dataObj, progressMessage);
+		} else {
+		    commonHandler(dataObj, deviceList.getTags.bind(deviceList));
+		}
 	})
 	.catch(err => {
 		errHandler(err.message, dataObj);

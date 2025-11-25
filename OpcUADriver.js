@@ -190,7 +190,10 @@ class CustomDriver{
         })
       }
 
-      if (this.browserFlag) throw Error(`Tag browsing in progress: ${this.browserCount}`);
+      if (this.browserFlag) {
+        resolve({progressTxt: `Tag browsing in progress: ${this.browserCount}`})
+        return
+      }
     })
   }
 
