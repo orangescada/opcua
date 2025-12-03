@@ -548,13 +548,28 @@ class ObjList {
 	 * @returns {object}
 	 */
 	static progressMessage(dataObj) {
-	return { 
-		error:"", 
-		answer: {
-			cmd: dataObj.cmd, transID: dataObj.transID, progressTxt: dataObj.progressTxt
-		}
-	}
-}
+	  return { 
+	  	error:"", 
+	  	answer: {
+	  		cmd: dataObj.cmd, transID: dataObj.transID, progressTxt: dataObj.progressTxt, progressId: dataObj.progressId
+	  	}
+      }
+    }
+
+	/**
+	 * progressIterationMessage - method returns answer with tags scan progress iteration
+	 * @param {object} dataObj - request object
+	 * @returns {object}
+	 */
+	static progressIterationMessage(dataObj) {
+	  const transID = getSubscribTransID();
+	  return { 
+	  	error:"", 
+	  	answer: {
+	  		cmd: 'progress', transID: transID, progressTxt: dataObj.progressTxt, progressId: dataObj.progressId, done: dataObj.done
+	  	}
+      }
+    }
 
 }
 
@@ -570,7 +585,7 @@ let nodeList = new ObjList(config.nodes, 'nodes');
 let deviceList = new ObjList(config.devices, 'devices', config.nodes);
 if(!config) process.exit(1);
 const {orangeScadaPort, orangeScadaHost, ssl, uid, password, version, isItemsEditable} = config.driver;
-let customDriver = new CustomDriver(deviceList, subscribeHandler, logger);
+let customDriver = new CustomDriver(deviceList, subscribeHandler, progressHandler, logger);
 
 
 //*****************************************************************
@@ -945,15 +960,6 @@ function setConfigHandler () {
 	setConfig(config);
 }
 
-function progressMessage(dataObj) {
-	return { 
-		error:"", 
-		answer: {
-			cmd:dataObj.cmd, transID: dataObj.transID, progressTxt: dataObj.progressTxt
-		}
-	}
-}
-
 /**
  * getTags command handler
  * @param {object} dataObj - request object
@@ -962,7 +968,7 @@ function getTags(dataObj){
 	customDriver.updateTagListFromDevice(dataObj, setConfigHandler)
 	.then(res => {
 		if (res?.progressTxt) {
-			dataObj.progressTxt = res.progressTxt
+			dataObj.progressTxt = res.progressTxt;
 			commonHandler(dataObj, ObjList.progressMessage);
 		} else {
 		    commonHandler(dataObj, deviceList.getTags.bind(deviceList));
@@ -1079,6 +1085,14 @@ function subscribeHandler(dataObj){
     		}, accumTime)
     	}
     }
+}
+
+// handler invoke from customDriver on progress position change
+/**
+ * @param {object} dataObj - request object
+ */
+function progressHandler(dataObj){
+	commonHandler(dataObj, ObjList.progressIterationMessage);
 }
 
 /**

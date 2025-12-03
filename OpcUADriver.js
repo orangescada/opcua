@@ -36,6 +36,7 @@ const restartOnChangeTxt        = 'Restart on change params';
 const defaultTimeout            = 10000;
 const dateTimeFormat            = 'DD.MM.YYYY HH:mm:ss';
 const maxStringSize             = 16;
+const sendProgressTimeout       = 1000;
 
 // class implements OPCUA driver
 class CustomDriver{
@@ -44,29 +45,30 @@ class CustomDriver{
    *  @param {object} deviceList - list of devices and nodes
    *  @param {method} subscribeHandler - handler calling then subscribed value changes
    */
-  constructor(deviceList, subscribeHandler, logger){
+  constructor(deviceList, subscribeHandler, progressHandler, logger){
     this.deviceList = deviceList;
     this.connections = {};
     this.subscribeHandler = subscribeHandler;
+    this.progressHandler = progressHandler;
     this.logger = logger;
     this.browserFlag = false;
     this.browserCount = 0;
-    // this.updateSubscribe();
+    this.progressId = 0;
   }
 
   // returns device status {active: true | false}
   getDeviceStatus(dataObj){
     let device = this.deviceList.list ? this.deviceList.list[dataObj.uid] : null;
     if(!device) return {active: false};
-    const deviceUid = dataObj.uid
+    const deviceUid = dataObj.uid;
     dataObj.deviceUid = deviceUid;
     let firstTag = device.tags ? Object.keys(device.tags)[0] : undefined;
     dataObj.tags = firstTag ? [firstTag] : [];
     let fullDeviceName = this.getFullDeviceAddress(dataObj.uid);
     if(!this.connections[fullDeviceName] || !this.connections[fullDeviceName][deviceUid]){
       this.getTagsList('read', dataObj)
-      .then(tags => this.createConnect(tags, dataObj.uid))
-      .catch( _ => {});
+        .then(tags => this.createConnect(tags, dataObj.uid))
+        .catch( _ => {});
       return {active: false};
     }
     return {active: this.connections[fullDeviceName][deviceUid].client.connected};
@@ -152,6 +154,21 @@ class CustomDriver{
   }
 
   /**
+   * sendProgress - this method must be implements if driver can abserve tags
+   * @param {object} dataObj - object contains device for tags update
+   * @returns {boolean} true if config has updated, otherwise false
+   */
+  sendProgress(dataObj) {
+    dataObj.progressTxt = `Tag browsing in progress: ${this.browserCount}`;
+    dataObj.progressId = this.progressId;
+    dataObj.done = !this.browserFlag;
+    this.progressHandler(dataObj)
+    if (this.browserFlag) {
+      setTimeout(() => this.sendProgress(dataObj), sendProgressTimeout);
+    }
+  }
+
+  /**
    * updateTagListFromDevice - this method must be implements if driver can abserve tags
    * @param {object} dataObj - object contains device for tags update
    * @returns {boolean} true if config has updated, otherwise false
@@ -170,8 +187,10 @@ class CustomDriver{
 
       const session = this.connections[fullDeviceName] ? this.connections[fullDeviceName][dataObj.deviceUid]?.session : undefined;
       if (!this.browserFlag) {
-        this.browserCount = 0;
+        this.browserCount = 0
         this.browserFlag = true
+        this.progressId++
+        this.sendProgress(dataObj)
         const createConnectPromise = session ? Promise.resolve() : this.createConnect([], dataObj.deviceUid)
   
         createConnectPromise
@@ -191,7 +210,7 @@ class CustomDriver{
       }
 
       if (this.browserFlag) {
-        resolve({progressTxt: `Tag browsing in progress: ${this.browserCount}`})
+        resolve({progressTxt: `Tag browsing in progress: ${this.browserCount}`, progressId: this.progressId})
         return
       }
     })
