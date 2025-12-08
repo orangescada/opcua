@@ -566,7 +566,11 @@ class ObjList {
 	  return { 
 	  	error:"", 
 	  	answer: {
-	  		cmd: 'progress', transID: transID, progressTxt: dataObj.progressTxt, progressId: dataObj.progressId, done: dataObj.done
+	  		cmd: 'progress',
+			transID: transID,
+			progressTxt: dataObj.progressTxt,
+			progressId: dataObj.progressId,
+			done: dataObj.done
 	  	}
       }
     }

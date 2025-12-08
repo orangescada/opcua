@@ -159,7 +159,11 @@ class CustomDriver{
    * @returns {boolean} true if config has updated, otherwise false
    */
   sendProgress(dataObj) {
-    dataObj.progressTxt = `Tag browsing in progress: ${this.browserCount}`;
+    if (this.browserFlag) {
+      dataObj.progressTxt = `Tag browsing in progress: ${this.browserCount}`;
+    } else {
+      dataObj.progressTxt = `Tag browsing completed: ${this.browserCount}`;
+    }
     dataObj.progressId = this.progressId;
     dataObj.done = !this.browserFlag;
     this.progressHandler(dataObj)
